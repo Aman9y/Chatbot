@@ -1,0 +1,35 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "919000000000",
+              "phone_number_id": "PHONE_NUMBER_ID"
+            },
+            "contacts": [
+              {
+                "profile": { "name": "Priya Sharma" },
+                "wa_id": "919812345670"
+              }
+            ],
+            "messages": [
+              {
+                "from": "919812345670",
+                "id": "wamid.INBOUND_TEXT_0001",
+                "timestamp": "1725700000",
+                "type": "text",
+                "text": { "body": "Hi, I want to know about MBBS in Georgia for my son" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

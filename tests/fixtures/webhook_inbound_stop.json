@@ -1,0 +1,32 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "919000000000",
+              "phone_number_id": "PHONE_NUMBER_ID"
+            },
+            "contacts": [
+              { "profile": { "name": "Rahul" }, "wa_id": "919812345671" }
+            ],
+            "messages": [
+              {
+                "from": "919812345671",
+                "id": "wamid.INBOUND_STOP_0001",
+                "timestamp": "1725700100",
+                "type": "text",
+                "text": { "body": "STOP" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

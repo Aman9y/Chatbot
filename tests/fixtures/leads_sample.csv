@@ -1,0 +1,7 @@
+name,phone,city,language,neet score,category,dob,age,consent,consent source,target country,parent phone,parent name,family id
+Priya Sharma,9812345670,Jaipur,Hindi,540,General,2003-04-12,,yes,neet_form_2024,Georgia,9812345699,Anil Sharma,FAM001
+Rahul Verma,09812345671,Lucknow,English,132,OBC,2002-01-01,,no,neet_form_2024,,,,
+Aisha Khan,+91 98123 45672,Delhi,English,610,General,,17,yes,webinar_reg,Germany,,,FAM003
+Sneha Patel,9812345673,Ahmedabad,Gujarati,,,2001-09-30,,,,Uzbekistan,,,
+Invalid Row,12345,Nowhere,English,300,General,,,yes,,,,,
+Vikram Singh,9812345674,Patna,Hindi,205,General,2011-06-20,,yes,neet_form_2024,Kazakhstan,9812345675,Meera Singh,FAM005

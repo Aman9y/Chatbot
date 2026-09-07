@@ -1,0 +1,159 @@
+"""Application configuration.
+
+Every value that Aman has not yet resolved (see docs/plan-critique.md) is
+represented here as an explicit optional / sentinel rather than a guessed
+default. Downstream code checks for the "unknown" state and refuses to invent
+data.
+"""
+
+from __future__ import annotations
+
+import json
+from decimal import Decimal
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.models.enums import MinorPolicyStatus
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+    # --- runtime -----------------------------------------------------------
+    app_env: str = "local"
+    log_level: str = "INFO"
+    log_json: bool = True
+
+    # --- datastores ------------------------------------------------------
+    database_url: str = "postgresql+asyncpg://chatbot:chatbot@localhost:5432/chatbot"
+    redis_url: str = "redis://localhost:6379/0"
+
+    # --- Meta WhatsApp Cloud API ---------------------------------------------
+    whatsapp_client: Literal["fake", "meta"] = "fake"
+    meta_app_secret: str = ""
+    meta_verify_token: str = "dev-verify-token"
+    meta_access_token: str = ""
+    meta_phone_number_id: str = ""
+    meta_business_account_id: str = ""
+    meta_graph_base_url: str = "https://graph.facebook.com"
+    meta_graph_version: str = "v21.0"
+    request_timeout_seconds: float = 15.0
+
+    # --- windows / cadence ---------------------------------------------------
+    service_window_hours: int = 24
+    engagement_push_hours: int = 24
+    engagement_handoff_hours: int = 48
+    silent_retry_max_rounds: int = 3
+
+    # --- outreach gating (UNRESOLVED: critique A1) --------------------------
+    outreach_require_verified_consent: bool = True
+
+    # --- minor policy (UNRESOLVED: critique A2) -----------------------------
+    minor_default_policy: MinorPolicyStatus = MinorPolicyStatus.PENDING_REVIEW
+
+    # --- NEET eligibility (UNRESOLVED: critique B9) -------------------------
+    neet_year: int | None = None
+    neet_cutoff_general: int | None = None
+    neet_cutoff_obc: int | None = None
+
+    # --- stateable cost tiers (UNRESOLVED: plan §2) ------------------------
+    stateable_cost_countries: str = "Kazakhstan,Uzbekistan,Kyrgyzstan"
+    stateable_cost_range: str | None = None
+
+    # --- opt-out keywords --------------------------------------------------
+    stop_keywords: str = "<defaults>"
+
+    # --- phone parsing --------------------------------------------------
+    default_phone_region: str = "IN"
+
+    # --- per-message cost rate card -------------------------------------
+    whatsapp_rate_card: str = "{}"
+
+    @field_validator("minor_default_policy", mode="before")
+    @classmethod
+    def _blank_policy_to_default(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return MinorPolicyStatus.PENDING_REVIEW
+        return v
+
+    @field_validator("neet_year", "neet_cutoff_general", "neet_cutoff_obc", mode="before")
+    @classmethod
+    def _blank_int_to_none(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        return v
+
+    @field_validator("stateable_cost_range", mode="before")
+    @classmethod
+    def _blank_str_to_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    # --- derived helpers ------------------------------------------------
+    @property
+    def stateable_cost_country_list(self) -> list[str]:
+        return [c.strip() for c in self.stateable_cost_countries.split(",") if c.strip()]
+
+    @property
+    def rate_card(self) -> dict[str, Decimal]:
+        try:
+            raw = json.loads(self.whatsapp_rate_card or "{}")
+        except json.JSONDecodeError:
+            return {}
+        out: dict[str, Decimal] = {}
+        for key, value in raw.items():
+            if key == "_currency":
+                continue
+            try:
+                out[key] = Decimal(str(value))
+            except (ArithmeticError, ValueError):
+                continue
+        return out
+
+    @property
+    def rate_card_currency(self) -> str:
+        try:
+            raw = json.loads(self.whatsapp_rate_card or "{}")
+        except json.JSONDecodeError:
+            return "INR"
+        return str(raw.get("_currency", "INR"))
+
+    @property
+    def unresolved_phase1_items(self) -> list[str]:
+        """Human-readable list of Phase-1 decisions still outstanding."""
+        items: list[str] = []
+        if self.neet_year is None:
+            items.append("NEET_YEAR (which cycle the ~1,200 leads sat) - critique B9")
+        if self.neet_cutoff_general is None or self.neet_cutoff_obc is None:
+            items.append("NEET_CUTOFF_GENERAL / NEET_CUTOFF_OBC - critique B9")
+        if self.outreach_require_verified_consent:
+            items.append(
+                "Consent audit of legacy leads not done - OUTREACH_REQUIRE_VERIFIED_CONSENT=true "
+                "blocks all outreach to imported leads (critique A1)"
+            )
+        if self.minor_default_policy in (
+            MinorPolicyStatus.PENDING_REVIEW,
+            MinorPolicyStatus.BLOCKED,
+        ):
+            items.append(
+                "Minor/DPDP policy undecided - "
+                f"MINOR_DEFAULT_POLICY={self.minor_default_policy.value} "
+                "blocks outreach to detected minors (critique A2)"
+            )
+        if self.stateable_cost_range is None:
+            items.append("STATEABLE_COST_RANGE (Kazakhstan/Uzbekistan tier figure) - plan s2")
+        return items
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

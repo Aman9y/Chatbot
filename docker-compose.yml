@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: chatbot
+      POSTGRES_PASSWORD: chatbot
+      POSTGRES_DB: chatbot
+    # Host port 5433 to avoid clashing with a native Postgres on 5432.
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatbot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    # Host port 6380 to avoid clashing with a native Redis on 6379.
+    ports:
+      - "6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: docker
+      DATABASE_URL: postgresql+asyncpg://chatbot:chatbot@db:5432/chatbot
+      REDIS_URL: redis://redis:6379/0
+      WHATSAPP_CLIENT: ${WHATSAPP_CLIENT:-fake}
+      META_APP_SECRET: ${META_APP_SECRET:-dev-app-secret-change-me}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-dev-verify-token}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
+      META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID:-}
+      OUTREACH_REQUIRE_VERIFIED_CONSENT: ${OUTREACH_REQUIRE_VERIFIED_CONSENT:-true}
+      MINOR_DEFAULT_POLICY: ${MINOR_DEFAULT_POLICY:-pending_review}
+      NEET_YEAR: ${NEET_YEAR:-}
+      NEET_CUTOFF_GENERAL: ${NEET_CUTOFF_GENERAL:-}
+      NEET_CUTOFF_OBC: ${NEET_CUTOFF_OBC:-}
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
+  redisdata:
