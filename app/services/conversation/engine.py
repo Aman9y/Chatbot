@@ -279,7 +279,7 @@ class ConversationEngine:
                     "time": booking.proposed_time,
                 },
             )
-        elif turn.engagement_phase == "handoff":
+        elif turn.engagement_phase == "handoff" and not lead.phase_handoff_notified:
             await notify_counselor(
                 self._session,
                 s,
@@ -291,6 +291,7 @@ class ConversationEngine:
                 ),
                 context={"trace_id": str(trace.id)},
             )
+            lead.phase_handoff_notified = True
 
         logger.info(
             "conversation reply sent",

@@ -41,3 +41,12 @@ replay: ## Replay a webhook fixture: make replay f=tests/fixtures/webhook_inboun
 
 config: ## Show resolved config and unresolved Phase-1 items
 	$(PY) -m app.cli check-config
+
+sweeps: ## Run all scheduler sweeps once
+	$(PY) -m app.cli run-sweeps
+
+worker: ## Run the Celery worker
+	$(PY) -m celery -A app.scheduler.celery_app worker --loglevel=info
+
+beat: ## Run Celery beat (fires the sweeps on a schedule)
+	$(PY) -m celery -A app.scheduler.celery_app beat --loglevel=info

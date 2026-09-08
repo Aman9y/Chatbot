@@ -132,8 +132,10 @@ class OutreachService:
         actor: SentBy = SentBy.BOT,
         reason: str | None = None,
         idempotency_key: str | None = None,
+        purpose: Literal["outreach", "reply"] = "outreach",
+        commit: bool = True,
     ) -> Message:
-        self.evaluate(lead).raise_if_blocked()
+        self.evaluate(lead, purpose=purpose).raise_if_blocked()
 
         # `persist_outbound` returns the existing row if this key was already
         # sent, so a retried send does not double-message.
@@ -173,7 +175,8 @@ class OutreachService:
             actor=actor.value,
             reason=reason or f"template:{template_name}",
         )
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
         logger.info("template sent lead=%s template=%s", lead.id, template_name)
         return message
 

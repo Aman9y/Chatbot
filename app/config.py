@@ -106,6 +106,31 @@ class Settings(BaseSettings):
     booking_detection_enabled: bool = True
     counselor_webhook_url: str = ""
 
+    # --- scheduler / re-engagement (Phase 5 + 6) -----------------------
+    celery_broker_url: str = ""  # blank -> derived from redis_url
+    celery_result_backend: str = ""
+    scheduler_enabled: bool = True
+    sweep_interval_seconds: int = 300
+    scheduler_batch_size: int = 200
+    scheduler_lock_ttl_seconds: int = 280
+
+    # in-window nudges (0-24h push phase)
+    nudge_after_hours: float = 6.0
+    nudge_max_per_window: int = 1
+
+    # SILENT re-open rounds (plan §5 / Phase 6 cold-lead retry)
+    reengagement_spacing_hours: str = "20,48,72"  # per-round delay, index by round
+    reengage_template_name: str = "reengage_v1"
+    reengage_template_language: str = "en"
+    reengage_template_category: str = "marketing"
+
+    # NURTURE cadence (48h+ no booking)
+    nurture_gap_days: float = 4.0
+    nurture_max_rounds: int = 2
+    nurture_template_name: str = "nurture_v1"
+    nurture_template_language: str = "en"
+    nurture_template_category: str = "marketing"
+
     # --- system-prompt placeholders (plan §7 / docs/system-prompt.md) --
     # Unset values render as safe generic phrasing ("our team" / "our counselor").
     company_name: str = ""
@@ -152,6 +177,36 @@ class Settings(BaseSettings):
     @property
     def language_list(self) -> list[str]:
         return [s.strip() for s in self.bot_languages.split(",") if s.strip()]
+
+    @property
+    def broker_url(self) -> str:
+        return self.celery_broker_url or self.redis_url
+
+    @property
+    def result_backend(self) -> str:
+        return self.celery_result_backend or self.redis_url
+
+    @property
+    def reengagement_spacing(self) -> list[float]:
+        out: list[float] = []
+        for token in self.reengagement_spacing_hours.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            try:
+                out.append(float(token))
+            except ValueError:
+                continue
+        return out or [20.0, 48.0, 72.0]
+
+    def reengagement_delay_hours(self, round_index: int) -> float:
+        spacing = self.reengagement_spacing
+        return spacing[min(round_index, len(spacing) - 1)]
+
+    @property
+    def silent_retry_max_rounds_effective(self) -> int:
+        # a round exists per configured spacing entry, capped by the explicit max
+        return min(self.silent_retry_max_rounds, len(self.reengagement_spacing))
 
     @property
     def rate_card(self) -> dict[str, Decimal]:

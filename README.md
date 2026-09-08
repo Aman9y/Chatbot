@@ -1,6 +1,6 @@
-# MBBS Abroad Lead Bot — Phases 2–4
+# MBBS Abroad Lead Bot — Phases 2–6
 
-FastAPI service + Postgres + Redis that:
+FastAPI service + Postgres + Redis + Celery that:
 
 - **Phase 2** — receives WhatsApp Cloud API webhooks, persists every message, runs
   one centralized lead state machine, imports the ~1,200 legacy leads, enforces
@@ -11,6 +11,9 @@ FastAPI service + Postgres + Redis that:
 - **Phase 4** — a deterministic **Response Guard** on every outbound reply
   (premium-cost figures, financing, admission guarantees, PG cost, length),
   with block → regenerate → safe-fallback.
+- **Phase 5 + 6** — a Celery scheduler: window-expiry → `SILENT`, in-window
+  nudges, time-based phase escalation, and spaced `SILENT`/`NURTURE` re-open
+  template rounds → `DORMANT` at the cap.
 
 Planning docs: [docs/build-plan.md](docs/build-plan.md),
 [docs/plan-critique.md](docs/plan-critique.md),
@@ -37,8 +40,9 @@ Planning docs: [docs/build-plan.md](docs/build-plan.md),
 | **Knowledge base** | `app/knowledge/kb.yaml` (hand-written, pre-redacted seed) + keyword retrieval. A redaction lint re-runs the guard detectors on load and refuses any chunk with a blocked figure (critique B3). pgvector is Phase 8. |
 | **Decision trace** | `conversation_traces` — per inbound turn: speaker, phase, KB chunks, every draft + guard verdict, tokens, final action, booking, errors (critique C2). |
 | **Handoff** | `handoff_notifications` + `app/services/handoff.py` — log + optional `COUNSELOR_WEBHOOK_URL` POST. Triggers: booking, phase-handoff (24–48h), guard-fallback, engine-error. |
-| **CLI** | `leadbot check-config / import-leads / replay-webhook / show-lead / send-template / simulate` |
-| **Tests** | 217 tests (`pytest`) — unit + integration, incl. an adversarial guard suite (critique C1) and real Alembic migrations in a subprocess |
+| **Scheduler** | `app/scheduler/` — Celery app + beat, 4 sweeps every `SWEEP_INTERVAL_SECONDS` under a Redis lock: `expire_windows` (→ `SILENT`), `advance_engagement` (phase-handoff alert / → `NURTURE` at 48h), `send_in_window_nudges` (canned nudge in the push phase), `run_reengagement` (`SILENT`/`NURTURE` re-open template rounds → `DORMANT`). All outbound goes through `OutreachService`; re-engagement templates need `purpose="outreach"` so the consent gate applies. |
+| **CLI** | `leadbot check-config / import-leads / replay-webhook / show-lead / send-template / simulate / run-sweeps` |
+| **Tests** | 237 tests (`pytest`) — unit + integration, incl. an adversarial guard suite (critique C1), the scheduler sweeps, and real Alembic migrations in a subprocess |
 
 ### Unresolved Phase 1 items — encoded as explicit config, not guessed
 
@@ -221,6 +225,43 @@ Mute the bot entirely with `BOT_AUTOREPLY_ENABLED=false` (ingestion still runs).
 
 ---
 
+## Scheduler (Phases 5–6)
+
+The Celery scheduler drives everything time-based: closing 24h windows, nudging
+quiet leads, escalating to a human at 24–48h, and the spaced re-open rounds for
+`SILENT` / `NURTURE` leads. Run all four sweeps once, by hand:
+
+```bash
+.venv/Scripts/python.exe -m app.cli run-sweeps
+```
+
+```
+{"status": "ok", "sweep": "expire_windows", "scanned": 1, "acted": 1, ...}
+{"status": "ok", "sweep": "advance_engagement", "scanned": 1, "acted": 1, ...}
+{"status": "ok", "sweep": "send_in_window_nudges", "scanned": 0, ...}
+{"status": "ok", "sweep": "run_reengagement", "scanned": 1, "acted": 1, ...}
+```
+
+On a schedule, run a worker + beat (both need the same env + DB/Redis):
+
+```bash
+.venv/Scripts/python.exe -m celery -A app.scheduler.celery_app worker --loglevel=info
+.venv/Scripts/python.exe -m celery -A app.scheduler.celery_app beat --loglevel=info
+```
+
+`docker compose up` starts `worker` and `beat` alongside `app`. Beat fires each
+sweep every `SWEEP_INTERVAL_SECONDS` (default 300); a Redis lock stops overlapping
+ticks from double-processing.
+
+**Templates:** `run_reengagement` sends `REENGAGE_TEMPLATE_NAME` / `NURTURE_TEMPLATE_NAME`
+— those must exist and be Meta-approved for real sends (plan §7, still pending).
+With `WHATSAPP_CLIENT=fake` they "send" fine. Re-engagement uses
+`purpose="outreach"`, so with `OUTREACH_REQUIRE_VERIFIED_CONSENT=true` every
+imported lead is skipped (logged, `next_reengagement_at` pushed out) until the
+Phase 1 consent audit.
+
+---
+
 ## Tests
 
 ```bash
@@ -240,9 +281,9 @@ migration applies and matches the models.
 docker compose up --build
 ```
 
-The `app` container runs `alembic upgrade head` on start (see
-`docker/entrypoint.sh`), then serves on `localhost:8000`. It talks to `db:5432` /
-`redis:6379` internally.
+`app` runs `alembic upgrade head` on start (see `docker/entrypoint.sh`), then
+serves on `localhost:8000`. `worker` and `beat` run the Celery scheduler. All
+talk to `db:5432` / `redis:6379` internally.
 
 ---
 
@@ -288,15 +329,17 @@ app/
     eligibility.py        NEET cutoff -> flag (or unknown)
     pricing.py            optional rate-card cost estimation
     handoff.py            counsellor notifications (log / webhook)
+    nudges.py             canned in-window nudge copy
     whatsapp/             WhatsAppClient ABC + meta + fake + factory
     llm/                  LLMClient ABC + anthropic + openai + fake + factory
     knowledge/            KnowledgeBase ABC + YAML KB + redaction lint
     guard/                Response Guard — detectors, guard, safe fallback
     conversation/         prompt render, speaker, context, booking, engine
+  scheduler/             Celery app + beat, sweeps, locks, sync/async runner
   knowledge/kb.yaml       hand-written pre-redacted seed KB
   prompts/system_prompt.md  operational system prompt (rendered with config)
   importer/csv_importer.py
   cli.py                  operator CLI
-alembic/                  migration env + versions (0001, 0002)
+alembic/                  migration env + versions (0001–0003)
 tests/                    unit/ + integration/ + fixtures/
 ```

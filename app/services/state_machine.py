@@ -104,12 +104,24 @@ async def apply_event(
         lead.booked_at = now
     if to_state == S.OPTED_OUT and lead.opted_out_at is None:
         lead.opted_out_at = now
+    if to_state == S.DORMANT and lead.dormant_at is None:
+        lead.dormant_at = now
     if event in (E.HUMAN_TAKEOVER, E.BOOKING_CONFIRMED) and not lead.human_owned:
         lead.human_owned = True
         lead.human_owned_since = now
     if event == E.HUMAN_RELEASE:
         lead.human_owned = False
         lead.human_owned_since = None
+
+    # Scheduler bookkeeping: a fresh engagement clears re-engagement counters so
+    # the cadence restarts from scratch next time they go quiet (Phase 5 + 6).
+    if to_state == S.ENGAGED and from_state != S.ENGAGED:
+        lead.nudge_count = 0
+        lead.phase_handoff_notified = False
+        lead.silent_retry_round = 0
+        lead.nurture_round = 0
+        lead.next_reengagement_at = None
+        lead.dormant_at = None
 
     transition = LifecycleTransition(
         lead_id=lead.id,

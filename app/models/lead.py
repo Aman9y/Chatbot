@@ -111,6 +111,15 @@ class Lead(UUIDMixin, TimestampMixin, Base):
     booked_at: Mapped[datetime | None] = mapped_column(DateTime)
     service_window_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
     silent_retry_round: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    dormant_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    # --- scheduler / re-engagement bookkeeping (Phase 5 + 6) ----------
+    last_nudge_at: Mapped[datetime | None] = mapped_column(DateTime)
+    nudge_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    phase_handoff_notified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    next_reengagement_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    last_reengagement_at: Mapped[datetime | None] = mapped_column(DateTime)
+    nurture_round: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # --- human handoff (critique B6, D5) ------------------------------
     human_owned: Mapped[bool] = mapped_column(

@@ -1,3 +1,22 @@
+x-app-env: &app-env
+  APP_ENV: docker
+  DATABASE_URL: postgresql+asyncpg://chatbot:chatbot@db:5432/chatbot
+  REDIS_URL: redis://redis:6379/0
+  WHATSAPP_CLIENT: ${WHATSAPP_CLIENT:-fake}
+  META_APP_SECRET: ${META_APP_SECRET:-dev-app-secret-change-me}
+  META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-dev-verify-token}
+  META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
+  META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID:-}
+  LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OUTREACH_REQUIRE_VERIFIED_CONSENT: ${OUTREACH_REQUIRE_VERIFIED_CONSENT:-true}
+  MINOR_DEFAULT_POLICY: ${MINOR_DEFAULT_POLICY:-pending_review}
+  SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+  NEET_YEAR: ${NEET_YEAR:-}
+  NEET_CUTOFF_GENERAL: ${NEET_CUTOFF_GENERAL:-}
+  NEET_CUTOFF_OBC: ${NEET_CUTOFF_OBC:-}
+
 services:
   db:
     image: postgres:16-alpine
@@ -37,22 +56,32 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
-      APP_ENV: docker
-      DATABASE_URL: postgresql+asyncpg://chatbot:chatbot@db:5432/chatbot
-      REDIS_URL: redis://redis:6379/0
-      WHATSAPP_CLIENT: ${WHATSAPP_CLIENT:-fake}
-      META_APP_SECRET: ${META_APP_SECRET:-dev-app-secret-change-me}
-      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-dev-verify-token}
-      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
-      META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID:-}
-      OUTREACH_REQUIRE_VERIFIED_CONSENT: ${OUTREACH_REQUIRE_VERIFIED_CONSENT:-true}
-      MINOR_DEFAULT_POLICY: ${MINOR_DEFAULT_POLICY:-pending_review}
-      NEET_YEAR: ${NEET_YEAR:-}
-      NEET_CUTOFF_GENERAL: ${NEET_CUTOFF_GENERAL:-}
-      NEET_CUTOFF_OBC: ${NEET_CUTOFF_OBC:-}
+    environment: *app-env
     ports:
       - "8000:8000"
+
+  worker:
+    build: .
+    depends_on:
+      app:
+        condition: service_started
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment: *app-env
+    # migrations are applied by `app`; the worker just runs the Celery worker
+    entrypoint: []
+    command: ["celery", "-A", "app.scheduler.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+
+  beat:
+    build: .
+    depends_on:
+      worker:
+        condition: service_started
+    environment: *app-env
+    entrypoint: []
+    command: ["celery", "-A", "app.scheduler.celery_app", "beat", "--loglevel=info"]
 
 volumes:
   pgdata:

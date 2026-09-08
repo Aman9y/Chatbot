@@ -5,6 +5,8 @@
     leadbot show-lead      <phone>
     leadbot check-config
     leadbot send-template  <phone> <template> [--lang en] [--var k=v ...]
+    leadbot simulate       <phone> <message>
+    leadbot run-sweeps
 """
 
 from __future__ import annotations
@@ -304,6 +306,18 @@ def simulate(
             await llm.aclose()
 
     asyncio.run(_run())
+
+
+@app.command("run-sweeps")
+def run_sweeps() -> None:
+    """Run all scheduler sweeps once (expire_windows, advance_engagement,
+    send_in_window_nudges, run_reengagement) against the configured DB/Redis.
+    The Celery beat worker does this on a schedule; this is for manual runs."""
+
+    from app.scheduler.runner import run_all_sweeps_once
+
+    for result in run_all_sweeps_once():
+        typer.echo(json.dumps(result))
 
 
 if __name__ == "__main__":
