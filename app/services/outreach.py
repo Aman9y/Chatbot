@@ -3,17 +3,25 @@
 `evaluate()` is the single gate every bot-initiated message must pass. Hard
 blocks depend on `purpose`:
 
+  purpose="consent_ask" (the in-chat opt-in ask itself — build-plan §2 gate):
+  * only blocked by opt-out, a parked gate (minor/needs-human/refused),
+    human-owned/handoff, or the lead already being past the opt-in step.
+    NOT blocked by unverified consent — this ask IS the consent step.
+
   purpose="outreach" (business-initiated template / cold message):
   * opted-out lead                -> never contact (critique A1/A3)
+  * consent gate not CLEARED      -> blocked (must pass the opt-in + age gate first)
   * consent not verified          -> blocked while OUTREACH_REQUIRE_VERIFIED_CONSENT
                                      (legacy consent audit pending — critique A1)
   * consent unknown / withdrawn   -> blocked
   * detected minor + policy not cleared -> blocked (DPDP undecided — critique A2)
-  * human owns the thread / handoff in progress -> bot stays out (critique B6)
+  * human owns the thread / handoff / gate-hold -> bot stays out (critique B6)
 
   purpose="reply" (bot answering a lead-initiated message inside the 24h window):
   * marketing-consent checks are dropped — the lead messaged us first
-  * opt-out, human-owned, handoff, and minor-policy blocks still apply
+  * opt-out, parked-gate, human-owned, handoff, and minor-policy blocks still apply
+  * a gate still in progress (pending_opt_in / pending_age) is allowed — the
+    conversation engine runs the gate handler, not the sales flow
 """
 
 from __future__ import annotations
@@ -28,6 +36,7 @@ from app.config import Settings
 from app.errors import OutreachBlocked, ServiceWindowClosed
 from app.logging_config import get_logger
 from app.models.enums import (
+    ConsentGate,
     ConsentStatus,
     LifecycleEvent,
     LifecycleState,
@@ -75,7 +84,10 @@ class OutreachService:
 
     # -- the guard -----------------------------------------------------
     def evaluate(
-        self, lead: Lead, *, purpose: Literal["outreach", "reply"] = "outreach"
+        self,
+        lead: Lead,
+        *,
+        purpose: Literal["outreach", "reply", "consent_ask"] = "outreach",
     ) -> ContactDecision:
         hard: list[str] = []
         warn: list[str] = []
@@ -86,7 +98,25 @@ class OutreachService:
         ):
             hard.append("lead_opted_out")
 
-        if purpose == "outreach":
+        # A gate that parked the lead for a human blocks EVERYTHING.
+        if lead.consent_gate in (ConsentGate.MINOR_HOLD, ConsentGate.NEEDS_HUMAN):
+            hard.append(f"consent_gate_{lead.consent_gate.value}")
+        if lead.consent_gate == ConsentGate.REFUSED:
+            hard.append("consent_gate_refused")
+
+        if purpose == "consent_ask":
+            # the opt-in ask itself — only the blocks above apply, plus a
+            # already-answered / already-cleared guard
+            if lead.consent_gate in (
+                ConsentGate.PENDING_AGE,
+                ConsentGate.CLEARED,
+                ConsentGate.NOT_REQUIRED,
+            ):
+                hard.append("consent_gate_not_pending_opt_in")
+        elif purpose == "outreach":
+            # sales / re-engagement outreach needs the gate cleared first
+            if lead.consent_gate not in (ConsentGate.CLEARED, ConsentGate.NOT_REQUIRED):
+                hard.append("consent_gate_not_cleared")
             if lead.consent_status == ConsentStatus.WITHDRAWN:
                 hard.append("consent_withdrawn")
             if lead.consent_status == ConsentStatus.UNKNOWN:
@@ -102,7 +132,7 @@ class OutreachService:
 
         if lead.human_owned:
             hard.append("human_owned")
-        if lead.lifecycle_state == LifecycleState.HANDOFF:
+        if lead.lifecycle_state in (LifecycleState.HANDOFF, LifecycleState.GATE_HOLD):
             hard.append("human_handoff_in_progress")
 
         if lead.lifecycle_state == LifecycleState.DORMANT:
@@ -116,7 +146,7 @@ class OutreachService:
         )
 
     def can_contact(
-        self, lead: Lead, *, purpose: Literal["outreach", "reply"] = "outreach"
+        self, lead: Lead, *, purpose: Literal["outreach", "reply", "consent_ask"] = "outreach"
     ) -> bool:
         return self.evaluate(lead, purpose=purpose).allowed
 
@@ -132,7 +162,7 @@ class OutreachService:
         actor: SentBy = SentBy.BOT,
         reason: str | None = None,
         idempotency_key: str | None = None,
-        purpose: Literal["outreach", "reply"] = "outreach",
+        purpose: Literal["outreach", "reply", "consent_ask"] = "outreach",
         commit: bool = True,
     ) -> Message:
         self.evaluate(lead, purpose=purpose).raise_if_blocked()
@@ -188,7 +218,7 @@ class OutreachService:
         actor: SentBy = SentBy.BOT,
         reason: str | None = None,
         require_open_window: bool | None = None,
-        purpose: Literal["outreach", "reply"] = "outreach",
+        purpose: Literal["outreach", "reply", "consent_ask"] = "outreach",
         commit: bool = True,
         now=None,
     ) -> Message:

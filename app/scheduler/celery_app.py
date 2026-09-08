@@ -31,6 +31,10 @@ celery_app.conf.update(
 if _settings.scheduler_enabled:
     _iv = _settings.sweep_interval_seconds
     celery_app.conf.beat_schedule = {
+        "send-consent-asks": {
+            "task": "app.scheduler.tasks.send_consent_asks",
+            "schedule": float(_iv),
+        },
         "expire-windows": {
             "task": "app.scheduler.tasks.expire_windows",
             "schedule": float(_iv),

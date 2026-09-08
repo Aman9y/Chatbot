@@ -100,6 +100,22 @@ class Settings(BaseSettings):
     kb_path: str = "app/knowledge/kb.yaml"
     kb_retrieval_k: int = 4
 
+    # --- consent + age gate (build-plan §2 / DPDP) -----------------------
+    # Master switch. When false the engine treats every lead as gate-cleared
+    # (the pre-gate behaviour).
+    consent_gate_enabled: bool = True
+    # The outbound opt-in drip sweep. OFF by default — needs an approved Meta
+    # template and a deliberate operator decision to start contacting leads.
+    consent_ask_sweep_enabled: bool = False
+    consent_ask_template_name: str = "gate_consent_v1"
+    consent_ask_template_language: str = "en"
+    consent_ask_template_category: str = "marketing"
+    # WABA warm-up: how many opt-in asks one sweep tick sends (a natural drip).
+    consent_asks_per_sweep: int = 25
+    # Resend the opt-in ask this many times (spaced) before giving up -> DORMANT.
+    consent_ask_max_rounds: int = 2
+    consent_ask_gap_hours: float = 24.0
+
     # --- turn dispatch / concurrency (build-plan §3) ----------------------
     # "celery": webhook acks Meta immediately, then a Celery task processes the
     #           turn with a debounce window + per-lead Redis lock (production).
@@ -261,10 +277,13 @@ class Settings(BaseSettings):
             items.append("NEET_YEAR (which cycle the ~1,200 leads sat) - critique B9")
         if self.neet_cutoff_general is None or self.neet_cutoff_obc is None:
             items.append("NEET_CUTOFF_GENERAL / NEET_CUTOFF_OBC - critique B9")
-        if self.outreach_require_verified_consent:
+        if self.outreach_require_verified_consent and not self.consent_ask_sweep_enabled:
             items.append(
-                "Consent audit of legacy leads not done - OUTREACH_REQUIRE_VERIFIED_CONSENT=true "
-                "blocks all outreach to imported leads (critique A1)"
+                "Legacy-lead consent: the in-chat opt-in + age gate is the path through "
+                "OUTREACH_REQUIRE_VERIFIED_CONSENT, but CONSENT_ASK_SWEEP_ENABLED=false so "
+                "no opt-in asks are going out yet (needs the approved gate_consent template "
+                "+ an operator decision). Substantive DPDP/legacy-consent policy still open "
+                "(critique A1)."
             )
         if self.minor_default_policy in (
             MinorPolicyStatus.PENDING_REVIEW,

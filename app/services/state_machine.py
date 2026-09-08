@@ -23,10 +23,12 @@ _TABLE: dict[tuple[S, E], S] = {
     # Never contacted
     (S.NEVER_CONTACTED, E.OUTBOUND_TEMPLATE_SENT): S.CONTACTED,
     (S.NEVER_CONTACTED, E.INBOUND_MESSAGE): S.ENGAGED,  # unsolicited / click-to-WA
+    (S.NEVER_CONTACTED, E.RETRY_ROUNDS_EXHAUSTED): S.DORMANT,  # opt-in ask ignored
     # Contacted (template sent, awaiting first reply)
     (S.CONTACTED, E.INBOUND_MESSAGE): S.ENGAGED,
     (S.CONTACTED, E.OUTBOUND_TEMPLATE_SENT): S.CONTACTED,
     (S.CONTACTED, E.SERVICE_WINDOW_EXPIRED): S.SILENT,
+    (S.CONTACTED, E.RETRY_ROUNDS_EXHAUSTED): S.DORMANT,  # opt-in ask ignored
     # Engaged (inside a 24h window, LLM-driven later)
     (S.ENGAGED, E.INBOUND_MESSAGE): S.ENGAGED,
     (S.ENGAGED, E.OUTBOUND_MESSAGE_SENT): S.ENGAGED,
@@ -34,6 +36,14 @@ _TABLE: dict[tuple[S, E], S] = {
     (S.ENGAGED, E.HUMAN_TAKEOVER): S.HANDOFF,
     (S.ENGAGED, E.NURTURE_TIMEOUT): S.NURTURE,
     (S.ENGAGED, E.SERVICE_WINDOW_EXPIRED): S.SILENT,
+    (S.ENGAGED, E.GATE_HELD): S.GATE_HOLD,
+    (S.CONTACTED, E.GATE_HELD): S.GATE_HOLD,
+    # Gate hold (consent/age gate parked the lead — bot silent, human owns it)
+    (S.GATE_HOLD, E.INBOUND_MESSAGE): S.GATE_HOLD,
+    (S.GATE_HOLD, E.OUTBOUND_MESSAGE_SENT): S.GATE_HOLD,
+    (S.GATE_HOLD, E.HUMAN_RELEASE): S.ENGAGED,
+    (S.GATE_HOLD, E.HUMAN_TAKEOVER): S.HANDOFF,
+    (S.GATE_HOLD, E.SERVICE_WINDOW_EXPIRED): S.GATE_HOLD,
     # Silent (window closed, needs a re-open template)
     (S.SILENT, E.OUTBOUND_TEMPLATE_SENT): S.SILENT,
     (S.SILENT, E.INBOUND_MESSAGE): S.ENGAGED,
@@ -106,7 +116,7 @@ async def apply_event(
         lead.opted_out_at = now
     if to_state == S.DORMANT and lead.dormant_at is None:
         lead.dormant_at = now
-    if event in (E.HUMAN_TAKEOVER, E.BOOKING_CONFIRMED) and not lead.human_owned:
+    if event in (E.HUMAN_TAKEOVER, E.BOOKING_CONFIRMED, E.GATE_HELD) and not lead.human_owned:
         lead.human_owned = True
         lead.human_owned_since = now
     if event == E.HUMAN_RELEASE:

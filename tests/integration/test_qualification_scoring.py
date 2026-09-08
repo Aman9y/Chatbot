@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.config import Settings
 from app.models.conversation_trace import ConversationTrace
 from app.models.enums import (
+    ConsentGate,
     EligibilityFlag,
     HandoffTrigger,
     LeadScore,
@@ -48,6 +49,7 @@ async def _lead_with_inbound(session, redis, s, text, *, fast=True) -> tuple[Lea
         first_engaged_at=now - timedelta(minutes=20),
         last_outbound_at=now - timedelta(minutes=2 if fast else 500),
         last_inbound_at=now,
+        consent_gate=ConsentGate.CLEARED,
     )
     session.add(lead)
     await session.flush()

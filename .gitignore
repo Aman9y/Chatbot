@@ -13,6 +13,9 @@ htmlcov/
 !.env.example
 *.db
 *.sqlite3
+celerybeat-schedule
+celerybeat-schedule*
+celerybeat.pid
 node_modules/
 .DS_Store
 dist/

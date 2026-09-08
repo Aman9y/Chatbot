@@ -32,6 +32,7 @@ Planning docs: [docs/build-plan.md](docs/build-plan.md),
 | **Webhook** | `GET` verification handshake; `POST` with `X-Hub-Signature-256` HMAC check, payload-hash dedup (idempotent on `processed`, so a failed event is retried), per-`wamid` dedup, advance-only out-of-order status reconciliation, placeholder creation when a status arrives before its message |
 | **Turn concurrency** (build-plan §3) | 1) idempotency — the two dedup layers above; 2) debounce — `celery` dispatch acks Meta immediately then a `process_lead_turn` task waits `TURN_DEBOUNCE_MS` and merges a lead's rapid-fire messages into one turn (`engine.handle_pending_turn`, unmerged messages get a `merged` trace); 3) per-lead Redis lock (`LeadTurnLock`, TTL-bounded) held across engine + send — a second queued turn retries until it frees. `inline` dispatch (default, dev/tests/`simulate`) runs the engine in-request, one message at a time. |
 | **STOP / opt-out** | `app/services/stop_keywords.py` (multi-language, transliteration-aware) runs **before** any normal processing; sets a sticky `OPTED_OUT` state + consent record, closes the window |
+| **Consent + age gate** (build-plan §2 / DPDP) | `app/services/conversation/consent_gate.py` — before ANY sales turn: a plain opt-in ask, then an 18+/under-18 check, both read by the LLM/NLU layer (heuristics + LLM refinement, English/Hindi/mixed), never string-matched. Clear no → respectful close + `OPTED_OUT`. Confirmed under-18 → `GATE_HOLD` + `is_minor` / `minor_policy_status=pending_review` + counsellor `MINOR_HOLD` alert (**safe placeholder** — real minor policy still open). Unclear → re-asked once differently, then `GATE_HOLD` + `CONSENT_REVIEW` alert; an unclear answer is never a yes. Cleared → `consent_verified=true`, normal flow. Tracked in `leads.consent_gate` (a precondition, not a second lifecycle machine). `send_consent_asks` sweep drips the opt-in template (`CONSENT_ASK_SWEEP_ENABLED`, **off by default**). |
 | **Outreach guard** | `app/services/outreach.py` `evaluate()` — hard-blocks opted-out, unverified consent, unknown consent, minor-policy-not-cleared, human-owned, handoff-in-progress. `persist_outbound()` also hard-refuses opted-out leads. |
 | **WhatsApp client** | `WhatsAppClient` ABC + `MetaWhatsAppClient` (real Graph API) + `FakeWhatsAppClient` (deterministic, default). Swap via `WHATSAPP_CLIENT`. |
 | **Importer** | `leadbot import-leads` — E.164 normalization, invalid rows collected not fatal, merge-on-reimport (idempotent), DOB/age → minor policy, `parent_phone`/`family_id` → households |
@@ -42,7 +43,7 @@ Planning docs: [docs/build-plan.md](docs/build-plan.md),
 | **Knowledge base** | `app/knowledge/kb.yaml` (hand-written, pre-redacted seed) + keyword retrieval. A redaction lint re-runs the guard detectors on load and refuses any chunk with a blocked figure (critique B3). pgvector is Phase 8. |
 | **Decision trace** | `conversation_traces` — per inbound turn: speaker, phase, KB chunks, every draft + guard verdict, tokens, final action, booking, errors (critique C2). |
 | **Handoff** | `handoff_notifications` + `app/services/handoff.py` — log + optional `COUNSELOR_WEBHOOK_URL` POST. Triggers: booking, phase-handoff (24–48h), guard-fallback, engine-error. |
-| **Scheduler** | `app/scheduler/` — Celery app + beat, 4 sweeps every `SWEEP_INTERVAL_SECONDS` under a Redis lock: `expire_windows` (→ `SILENT`), `advance_engagement` (phase-handoff alert / → `NURTURE` at 48h), `send_in_window_nudges` (canned nudge in the push phase), `run_reengagement` (`SILENT`/`NURTURE` re-open template rounds → `DORMANT`). All outbound goes through `OutreachService`; re-engagement templates need `purpose="outreach"` so the consent gate applies. |
+| **Scheduler** | `app/scheduler/` — Celery app + beat, 5 sweeps every `SWEEP_INTERVAL_SECONDS` under a Redis lock: `send_consent_asks` (opt-in drip — off unless `CONSENT_ASK_SWEEP_ENABLED`), `expire_windows` (→ `SILENT`), `advance_engagement` (phase-handoff alert / → `NURTURE` at 48h), `send_in_window_nudges` (canned nudge in the push phase, gate-cleared leads only), `run_reengagement` (`SILENT`/`NURTURE` re-open rounds → `DORMANT`, gate-cleared leads only). All outbound goes through `OutreachService`. |
 | **CLI** | `leadbot check-config / import-leads / replay-webhook / show-lead / send-template / simulate / run-sweeps` |
 | **Tests** | 237 tests (`pytest`) — unit + integration, incl. an adversarial guard suite (critique C1), the scheduler sweeps, and real Alembic migrations in a subprocess |
 
@@ -53,9 +54,9 @@ Run `leadbot check-config` to see the live list. These are the blockers from
 
 | Item | How the code represents it |
 |---|---|
-| Consent audit of legacy leads (A1) | `OUTREACH_REQUIRE_VERIFIED_CONSENT=true` → every imported lead has `consent_verified=false` → **all bot outreach to them is blocked** |
-| DPDP / minor policy (A2) | `MINOR_DEFAULT_POLICY=pending_review` → detected minors are blocked from outreach |
-| Company / counsellor name (§7) | `COMPANY_NAME` / `COUNSELOR_NAME` unset → the system prompt renders "our team" / "our counsellor", and identity/credential questions stay generic (nothing invented) |
+| Consent for legacy leads (A1) | The in-chat opt-in + age gate is now the path through `OUTREACH_REQUIRE_VERIFIED_CONSENT` (a gate-cleared lead is `consent_verified=true`). `CONSENT_ASK_SWEEP_ENABLED=false` → no opt-in asks go out until the `gate_consent` template is approved and an operator turns it on. The substantive DPDP / legacy-consent policy is still open. |
+| DPDP / minor policy (A2) | Age gate stops the bot the moment a lead says under-18 (`GATE_HOLD`, counsellor-flagged) — a **safe placeholder**. `MINOR_DEFAULT_POLICY=pending_review` still blocks outreach to any detected minor. The real parent-consent / retention process is unresolved. |
+| Company / counsellor name (§7) | `COMPANY_NAME` / `COUNSELOR_NAME` unset → the system prompt renders "our team" / "our counsellor", identity/credential questions stay generic, and the opt-in ask says "our team" |
 
 **Resolved 2026-09-08 (Hamza):** NEET year + cutoffs (`NEET_YEAR=2026`,
 `NEET_CUTOFF_GENERAL=213`, `NEET_CUTOFF_OBC=175`); stateable cost tier
@@ -244,7 +245,7 @@ Mute the bot entirely with `BOT_AUTOREPLY_ENABLED=false` (ingestion still runs).
 
 The Celery scheduler drives everything time-based: closing 24h windows, nudging
 quiet leads, escalating to a human at 24–48h, and the spaced re-open rounds for
-`SILENT` / `NURTURE` leads. Run all four sweeps once, by hand:
+`SILENT` / `NURTURE` leads. Run all sweeps once, by hand:
 
 ```bash
 .venv/Scripts/python.exe -m app.cli run-sweeps

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.models.common import TimestampMixin, UUIDMixin, enum_column
 from app.models.enums import (
+    ConsentGate,
     ConsentStatus,
     EligibilityFlag,
     FunnelStage,
@@ -38,6 +39,7 @@ _FUNNEL_MAP: dict[LifecycleState, FunnelStage] = {
     LifecycleState.NURTURE: FunnelStage.ENGAGED,
     LifecycleState.DORMANT: FunnelStage.LOST,
     LifecycleState.HANDOFF: FunnelStage.HANDED_OFF,
+    LifecycleState.GATE_HOLD: FunnelStage.CONTACTED,
     LifecycleState.OPTED_OUT: FunnelStage.LOST,
 }
 
@@ -123,6 +125,17 @@ class Lead(UUIDMixin, TimestampMixin, Base):
     consent_last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime)
     opted_out_at: Mapped[datetime | None] = mapped_column(DateTime)
 
+    # --- conversational opt-in + age gate (build-plan §2 / DPDP) -------
+    # A precondition for the sales flow, tracked alongside (not inside) the
+    # lifecycle machine. Default PENDING_OPT_IN: nothing sells to a lead until
+    # they say yes and confirm 18+.
+    consent_gate: Mapped[ConsentGate] = enum_column(
+        ConsentGate, default=ConsentGate.PENDING_OPT_IN, nullable=False, index=True
+    )
+    gate_reask_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    consent_ask_sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    consent_ask_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     # --- lifecycle / single state machine (critique A5) ---------------
     lifecycle_state: Mapped[LifecycleState] = enum_column(
         LifecycleState, default=LifecycleState.NEVER_CONTACTED, nullable=False, index=True
@@ -197,7 +210,11 @@ class Lead(UUIDMixin, TimestampMixin, Base):
         from app.config import get_settings
         from app.models.common import utcnow
 
-        if self.lifecycle_state == LifecycleState.HANDOFF or self.booked_at is not None:
+        if (
+            self.lifecycle_state
+            in (LifecycleState.HANDOFF, LifecycleState.GATE_HOLD)
+            or self.booked_at is not None
+        ):
             return "n/a"
         if self.first_engaged_at is None:
             return "first_contact"

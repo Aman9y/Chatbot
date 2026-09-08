@@ -8,7 +8,14 @@ from sqlalchemy import select
 
 from app.config import Settings
 from app.models.conversation_trace import ConversationTrace
-from app.models.enums import LifecycleState, MessageDirection, MessageStatus, MessageType, SentBy
+from app.models.enums import (
+    ConsentGate,
+    LifecycleState,
+    MessageDirection,
+    MessageStatus,
+    MessageType,
+    SentBy,
+)
 from app.models.lead import Lead
 from app.models.message import Message
 from app.services.conversation.engine import ConversationEngine
@@ -35,6 +42,7 @@ async def _lead(session, redis, settings, text):
         phone_e164="+919812345670",
         lifecycle_state=LifecycleState.ENGAGED,
         first_engaged_at=utcnow(),
+        consent_gate=ConsentGate.CLEARED,
     )
     session.add(lead)
     await session.flush()

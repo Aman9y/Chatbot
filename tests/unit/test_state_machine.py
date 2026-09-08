@@ -24,10 +24,25 @@ from app.services.state_machine import next_state
         (S.DORMANT, E.INBOUND_MESSAGE, S.ENGAGED),
         (S.HANDOFF, E.INBOUND_MESSAGE, S.HANDOFF),
         (S.HANDOFF, E.HUMAN_RELEASE, S.ENGAGED),
+        (S.ENGAGED, E.GATE_HELD, S.GATE_HOLD),
+        (S.CONTACTED, E.GATE_HELD, S.GATE_HOLD),
+        (S.GATE_HOLD, E.INBOUND_MESSAGE, S.GATE_HOLD),
+        (S.GATE_HOLD, E.HUMAN_RELEASE, S.ENGAGED),
+        (S.NEVER_CONTACTED, E.RETRY_ROUNDS_EXHAUSTED, S.DORMANT),
+        (S.CONTACTED, E.RETRY_ROUNDS_EXHAUSTED, S.DORMANT),
     ],
 )
 def test_defined_transitions(current, event, expected):
     assert next_state(current, event) == expected
+
+
+async def test_gate_held_marks_human_owned(session):
+    lead = Lead(phone_e164="+919812345670", lifecycle_state=S.ENGAGED)
+    session.add(lead)
+    await session.flush()
+    await state_machine.apply_event(session, lead, E.GATE_HELD, actor="system")
+    assert lead.lifecycle_state == S.GATE_HOLD
+    assert lead.human_owned is True
 
 
 @pytest.mark.parametrize(

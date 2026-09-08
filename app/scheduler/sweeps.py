@@ -3,6 +3,7 @@
 Each sweep is a plain async function taking `SweepDeps`, so tests call them
 directly with a test session. The Celery layer (tasks.py) only wraps them.
 
+  send_consent_asks     drip the opt-in ask to un-gated leads (build-plan §2)
   expire_windows        24h window closed -> SILENT, schedule first re-open
   advance_engagement    time-based phase escalation the reactive engine misses
   send_in_window_nudges gentle "still there?" in the 0-24h push phase
@@ -21,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.logging_config import get_logger, log_extra, mask_phone
 from app.models.enums import (
+    ConsentGate,
     ConsentStatus,
     HandoffTrigger,
     LifecycleEvent,
@@ -69,6 +71,93 @@ class SweepResult:
 
 def _outreach(deps: SweepDeps) -> OutreachService:
     return OutreachService(deps.session, deps.redis, deps.settings, deps.wa_client)
+
+
+# ---------------------------------------------------------------------------
+async def send_consent_asks(deps: SweepDeps) -> SweepResult:
+    """Drip the in-chat opt-in ask to leads that have not passed the gate
+    (build-plan §2). OFF unless CONSENT_ASK_SWEEP_ENABLED — sending starts real
+    contact with real people and needs an approved template + a deliberate call.
+    """
+
+    s = deps.settings
+    result = SweepResult("send_consent_asks")
+    if not (s.consent_gate_enabled and s.consent_ask_sweep_enabled):
+        return result
+
+    now = utcnow()
+    gap = timedelta(hours=s.consent_ask_gap_hours)
+    rows = (
+        await deps.session.scalars(
+            select(Lead)
+            .where(Lead.consent_gate.in_([ConsentGate.PENDING_OPT_IN, ConsentGate.PENDING_AGE]))
+            .where(
+                Lead.lifecycle_state.in_(
+                    [
+                        LifecycleState.NEVER_CONTACTED,
+                        LifecycleState.CONTACTED,
+                        LifecycleState.SILENT,
+                    ]
+                )
+            )
+            .where(Lead.consent_status != ConsentStatus.OPTED_OUT)
+            .where(Lead.human_owned.is_(False))
+            .where(
+                (Lead.consent_ask_sent_at.is_(None))
+                | (Lead.consent_ask_sent_at <= now - gap)
+            )
+            .order_by(Lead.consent_ask_sent_at.is_(None).desc(), Lead.created_at)
+            .limit(s.consent_asks_per_sweep)
+        )
+    ).all()
+
+    outreach = _outreach(deps)
+    for lead in rows:
+        result.scanned += 1
+        try:
+            if lead.consent_ask_count >= s.consent_ask_max_rounds:
+                if state_machine.is_allowed(
+                    lead.lifecycle_state, LifecycleEvent.RETRY_ROUNDS_EXHAUSTED
+                ):
+                    await state_machine.apply_event(
+                        deps.session,
+                        lead,
+                        LifecycleEvent.RETRY_ROUNDS_EXHAUSTED,
+                        actor="scheduler",
+                        reason=f"{lead.consent_ask_count} opt-in asks, no reply",
+                        now=now,
+                    )
+                    result.acted += 1
+                else:
+                    result.skipped += 1
+                continue
+
+            decision = outreach.evaluate(lead, purpose="consent_ask")
+            if not decision.allowed:
+                result.skipped += 1
+                continue
+
+            await outreach.send_template(
+                lead,
+                template_name=s.consent_ask_template_name,
+                language=s.consent_ask_template_language,
+                category=_template_category(s.consent_ask_template_category),
+                actor=SentBy.BOT,
+                reason=f"opt-in ask round {lead.consent_ask_count + 1}",
+                idempotency_key=f"consent_ask:{lead.id}:r{lead.consent_ask_count}",
+                purpose="consent_ask",
+                commit=False,
+            )
+            lead.consent_ask_sent_at = now
+            lead.consent_ask_count += 1
+            result.acted += 1
+        except Exception:  # noqa: BLE001
+            logger.exception("send_consent_asks failed for lead %s", lead.id)
+            result.errors += 1
+
+    await deps.session.commit()
+    logger.info("sweep send_consent_asks: %s", result.as_dict())
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +280,9 @@ async def send_in_window_nudges(deps: SweepDeps) -> SweepResult:
             .where(Lead.service_window_expires_at > now)
             .where(Lead.booked_at.is_(None))
             .where(Lead.human_owned.is_(False))
+            .where(
+                Lead.consent_gate.in_([ConsentGate.CLEARED, ConsentGate.NOT_REQUIRED])
+            )
             .where(Lead.nudge_count < s.nudge_max_per_window)
             .limit(s.scheduler_batch_size)
         )
@@ -249,6 +341,11 @@ async def run_reengagement(deps: SweepDeps) -> SweepResult:
             .where(Lead.next_reengagement_at <= now)
             .where(Lead.consent_status != ConsentStatus.OPTED_OUT)
             .where(Lead.human_owned.is_(False))
+            # sales re-engagement only for gate-cleared leads; un-gated leads are
+            # the send_consent_asks sweep's job
+            .where(
+                Lead.consent_gate.in_([ConsentGate.CLEARED, ConsentGate.NOT_REQUIRED])
+            )
             .limit(s.scheduler_batch_size)
         )
     ).all()
@@ -367,6 +464,7 @@ def _template_category(value: str) -> TemplateCategory:
 
 
 ALL_SWEEPS = {
+    "send_consent_asks": send_consent_asks,
     "expire_windows": expire_windows,
     "advance_engagement": advance_engagement,
     "send_in_window_nudges": send_in_window_nudges,

@@ -7,6 +7,7 @@ def test_celery_app_and_beat_schedule():
     assert celery_app.main == "leadbot"
     tasks = set(celery_app.conf.beat_schedule)
     assert tasks == {
+        "send-consent-asks",
         "expire-windows",
         "advance-engagement",
         "send-in-window-nudges",
@@ -47,6 +48,7 @@ def test_all_tasks_registered():
     from app.scheduler.celery_app import celery_app
 
     for name in (
+        "app.scheduler.tasks.send_consent_asks",
         "app.scheduler.tasks.expire_windows",
         "app.scheduler.tasks.advance_engagement",
         "app.scheduler.tasks.send_in_window_nudges",

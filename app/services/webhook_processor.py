@@ -207,10 +207,13 @@ class WebhookProcessor:
         event.processed_at = utcnow()
         event.processing_error = None
         await self._session.commit()
+        # Capture the id now: the conversation engine may roll the session back on
+        # its own errors, which expires this ORM instance.
+        event_id = str(event.id)
 
         await self._run_pending_conversations()
 
-        return IngestResult("processed", 200, str(event.id))
+        return IngestResult("processed", 200, event_id)
 
     async def _run_pending_conversations(self) -> None:
         """Hand each new inbound message to the conversation layer, after the

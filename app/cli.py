@@ -57,6 +57,8 @@ def check_config() -> None:
     typer.echo(f"whatsapp_client       : {settings.whatsapp_client}")
     typer.echo(f"service_window_hours  : {settings.service_window_hours}")
     typer.echo(f"require_verified_consent : {settings.outreach_require_verified_consent}")
+    typer.echo(f"consent_gate_enabled  : {settings.consent_gate_enabled}")
+    typer.echo(f"consent_ask_sweep     : {settings.consent_ask_sweep_enabled}")
     typer.echo(f"minor_default_policy  : {settings.minor_default_policy.value}")
     typer.echo(f"neet_year             : {settings.neet_year}")
     typer.echo(f"neet_cutoff_general   : {settings.neet_cutoff_general}")
@@ -161,6 +163,10 @@ def show_lead(phone: str = typer.Argument(...)) -> None:
             )
             typer.echo(
                 f"  consent     : {lead.consent_status.value}  verified={lead.consent_verified}"
+            )
+            typer.echo(
+                f"  gate        : {lead.consent_gate.value}  "
+                f"reasks={lead.gate_reask_count}  asks_sent={lead.consent_ask_count}"
             )
             typer.echo(
                 f"  minor       : {lead.is_minor.value}  policy={lead.minor_policy_status.value}"
@@ -287,6 +293,12 @@ def simulate(
                 if created or lead.lifecycle_state == LifecycleState.NEVER_CONTACTED:
                     lead.lifecycle_state = LifecycleState.ENGAGED
                     lead.first_engaged_at = lead.first_engaged_at or utcnow()
+                # `simulate` exercises the sales flow; skip the consent+age gate
+                # (test it via replay-webhook or the gate unit tests instead)
+                from app.models.enums import ConsentGate
+
+                if lead.consent_gate != ConsentGate.CLEARED:
+                    lead.consent_gate = ConsentGate.CLEARED
                 await WindowService(redis, settings).touch(lead)
                 inbound = Message(
                     lead_id=lead.id,

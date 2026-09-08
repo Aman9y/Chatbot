@@ -24,19 +24,31 @@ from app.config import Settings
 from app.logging_config import get_logger, log_extra, mask_phone
 from app.models.conversation_trace import ConversationTrace
 from app.models.enums import (
+    ConsentGate,
+    ConsentMethod,
+    ConsentStatus,
     HandoffTrigger,
     LeadScore,
     LifecycleEvent,
     LifecycleState,
     MessageDirection,
     MessageType,
+    MinorPolicyStatus,
+    MinorStatus,
     RoleHint,
     SentBy,
 )
 from app.models.lead import Lead
 from app.models.message import Message
+from app.services import consent as consent_service
 from app.services import state_machine
+from app.services.conversation import consent_gate as gate_copy
 from app.services.conversation.booking import BookingSignal, detect_booking
+from app.services.conversation.consent_gate import (
+    interpret_age_reply,
+    interpret_optin_reply,
+    stated_age,
+)
 from app.services.conversation.context import build_turn_context
 from app.services.conversation.extraction import apply_to_lead, extract_qualifiers
 from app.services.conversation.scoring import ScoreInputs, score_lead
@@ -53,8 +65,18 @@ from app.services.windows import WindowService
 
 logger = get_logger(__name__)
 
-_BOT_OWNED_STATES = {LifecycleState.HANDOFF, LifecycleState.OPTED_OUT}
+_BOT_OWNED_STATES = {
+    LifecycleState.HANDOFF,
+    LifecycleState.GATE_HOLD,
+    LifecycleState.OPTED_OUT,
+}
 _TEXTUAL_TYPES = (MessageType.TEXT, MessageType.INTERACTIVE, MessageType.BUTTON)
+# consent_gate values where the bot must not run the sales flow at all
+_GATE_STOPPED = {
+    ConsentGate.REFUSED,
+    ConsentGate.MINOR_HOLD,
+    ConsentGate.NEEDS_HUMAN,
+}
 
 
 @dataclass
@@ -238,6 +260,25 @@ class ConversationEngine:
                 )
             return self._skip(trace, f"reply_blocked:{reason}")
 
+        # --- consent + age gate (build-plan §2 / DPDP) ------------------
+        # Nothing sells to a lead until they opt in AND confirm 18+.
+        if s.consent_gate_enabled:
+            gate = lead.consent_gate
+            if gate in _GATE_STOPPED:
+                return self._skip(trace, f"consent_gate:{gate.value}")
+            if gate not in (ConsentGate.CLEARED, ConsentGate.NOT_REQUIRED):
+                gate_result = await self._run_consent_gate(lead, inbound_message, trace, text)
+                if gate_result is not None:
+                    return gate_result
+                # gate just cleared on an 18+ answer — fall through to the sales flow
+
+        return await self._run_sales(lead, inbound_message, trace, text)
+
+    async def _run_sales(
+        self, lead: Lead, inbound_message: Message, trace: ConversationTrace, text: str
+    ) -> ConversationResult:
+        s = self._settings
+
         # Lazy NURTURE transition at 48h+ (plan §5; timed firing is Phase 5).
         if (
             lead.engagement_phase() == "nurture"
@@ -295,6 +336,7 @@ class ConversationEngine:
         trace.llm_provider = self._llm.provider
         trace.llm_model = reply_model(s)
         trace.turn_signals = {
+            **(trace.turn_signals or {}),
             "pace": turn.pace_plan.pace if turn.pace_plan else None,
             "message_depth": turn.pace_plan.message_depth if turn.pace_plan else None,
             "tone_stage": turn.pace_plan.tone_stage if turn.pace_plan else None,
@@ -446,6 +488,207 @@ class ConversationEngine:
             outbound_message_id=outbound.id,
             trace_id=trace.id,
             booking_detected=booking.detected,
+        )
+
+    # -- consent + age gate ------------------------------------------
+    async def _run_consent_gate(
+        self, lead: Lead, inbound_message: Message, trace: ConversationTrace, text: str
+    ) -> ConversationResult | None:
+        """Handle one gate turn. Returns a terminal ConversationResult, or None
+        when the age gate just cleared (caller falls through to the sales flow)."""
+
+        s = self._settings
+        use_llm = s.llm_provider != "fake"
+        model = classifier_model(s)
+        stage = lead.consent_gate
+
+        if stage == ConsentGate.PENDING_OPT_IN:
+            # Lead messaged us first (no opt-in ask was sent) -> opt-in is implicit;
+            # go straight to the age question.
+            if lead.consent_ask_sent_at is None:
+                await self._gate_record_opt_in(lead, text)
+                lead.consent_gate = ConsentGate.PENDING_AGE
+                lead.gate_reask_count = 0
+                self._gate_signal(trace, "opt_in", "implicit", 0)
+                return await self._gate_reply(
+                    lead, trace, gate_copy.age_ask(s), "gate_age_ask"
+                )
+            verdict = await interpret_optin_reply(
+                text, llm=self._llm, model=model, use_llm=use_llm
+            )
+            self._gate_signal(trace, "opt_in", verdict, lead.gate_reask_count)
+            if verdict == "yes":
+                await self._gate_record_opt_in(lead, text)
+                lead.consent_gate = ConsentGate.PENDING_AGE
+                lead.gate_reask_count = 0
+                return await self._gate_reply(
+                    lead, trace, gate_copy.age_ask(s), "gate_age_ask"
+                )
+            if verdict == "no":
+                return await self._gate_decline(lead, inbound_message, trace, text)
+            return await self._gate_unclear(lead, trace, "opt_in")
+
+        # PENDING_AGE — a clear "no / not interested" here still opts the lead out
+        if await interpret_optin_reply(
+            text, llm=self._llm, model=model, use_llm=use_llm
+        ) == "no":
+            self._gate_signal(trace, "age", "declined", lead.gate_reask_count)
+            return await self._gate_decline(lead, inbound_message, trace, text)
+
+        verdict = await interpret_age_reply(
+            text, llm=self._llm, model=model, use_llm=use_llm
+        )
+        self._gate_signal(trace, "age", verdict, lead.gate_reask_count)
+        if verdict == "adult":
+            self._gate_clear_adult(lead, text)
+            logger.info("consent gate cleared for lead %s", lead.id)
+            return None  # -> sales flow
+        if verdict == "minor":
+            return await self._gate_minor_hold(lead, trace, text)
+        return await self._gate_unclear(lead, trace, "age")
+
+    @staticmethod
+    def _gate_signal(
+        trace: ConversationTrace, stage: str, verdict: str, reask: int
+    ) -> None:
+        trace.turn_signals = {
+            **(trace.turn_signals or {}),
+            "gate": {"stage": stage, "verdict": verdict, "reask_count": reask},
+        }
+
+    async def _gate_reply(
+        self, lead: Lead, trace: ConversationTrace, message: str, action: str
+    ) -> ConversationResult:
+        outbound = await self._outreach.send_text(
+            lead,
+            text=message,
+            actor=SentBy.BOT,
+            reason=f"consent gate: {action}",
+            purpose="reply",
+            commit=False,
+        )
+        trace.outbound_message_id = outbound.id
+        trace.final_text = message
+        trace.final_action = action
+        return ConversationResult(
+            action,
+            reply_text=message,
+            outbound_message_id=outbound.id,
+            trace_id=trace.id,
+        )
+
+    async def _gate_record_opt_in(self, lead: Lead, text: str) -> None:
+        await consent_service.record_consent(
+            self._session,
+            lead,
+            status=ConsentStatus.OPTED_IN,
+            method=ConsentMethod.CONVERSATIONAL_GATE,
+            verified=True,
+            consent_text=text[:1000],
+            source_reference="in_chat_opt_in",
+            notes="Replied yes to the in-chat opt-in ask (build-plan §2 gate).",
+        )
+
+    def _gate_clear_adult(self, lead: Lead, text: str) -> None:
+        lead.consent_gate = ConsentGate.CLEARED
+        lead.gate_reask_count = 0
+        lead.is_minor = MinorStatus.NO
+        lead.minor_policy_status = MinorPolicyStatus.NOT_APPLICABLE
+        age = stated_age(text)
+        if age is not None and lead.age_years is None:
+            lead.age_years = age
+        # opting in via the gate is a verified, affirmative opt-in
+        lead.consent_status = ConsentStatus.OPTED_IN
+        lead.consent_verified = True
+
+    async def _gate_decline(
+        self, lead: Lead, inbound_message: Message, trace: ConversationTrace, text: str
+    ) -> ConversationResult:
+        # send the respectful close BEFORE opting out / flipping the gate — both
+        # of those block outbound sends
+        result = await self._gate_reply(
+            lead, trace, gate_copy.decline_close(self._settings), "gate_declined"
+        )
+        lead.consent_gate = ConsentGate.REFUSED
+        await consent_service.opt_out(
+            self._session,
+            lead,
+            reason_text=text,
+            method=ConsentMethod.CONVERSATIONAL_GATE,
+            inbound_message=inbound_message,
+            actor="lead",
+        )
+        return result
+
+    async def _gate_minor_hold(
+        self, lead: Lead, trace: ConversationTrace, text: str
+    ) -> ConversationResult:
+        # send the holding message BEFORE flipping to a state the guard blocks
+        result = await self._gate_reply(
+            lead, trace, gate_copy.minor_hold_message(self._settings), "gate_minor_hold"
+        )
+        lead.consent_gate = ConsentGate.MINOR_HOLD
+        lead.is_minor = MinorStatus.YES
+        lead.minor_policy_status = MinorPolicyStatus.PENDING_REVIEW
+        age = stated_age(text)
+        if age is not None:
+            lead.age_years = age
+        await self._gate_park(lead, trace, HandoffTrigger.MINOR_HOLD, text, minor=True)
+        return result
+
+    async def _gate_unclear(
+        self, lead: Lead, trace: ConversationTrace, stage: str
+    ) -> ConversationResult:
+        s = self._settings
+        if lead.gate_reask_count < 1:
+            lead.gate_reask_count += 1
+            msg = (
+                gate_copy.consent_reask(s)
+                if stage == "opt_in"
+                else gate_copy.age_reask(s)
+            )
+            return await self._gate_reply(lead, trace, msg, "gate_reask")
+        # send the review notice BEFORE flipping to a state the guard blocks
+        result = await self._gate_reply(
+            lead, trace, gate_copy.review_hold_message(s), "gate_review"
+        )
+        lead.consent_gate = ConsentGate.NEEDS_HUMAN
+        await self._gate_park(
+            lead, trace, HandoffTrigger.CONSENT_REVIEW, f"stage={stage}", minor=False
+        )
+        return result
+
+    async def _gate_park(
+        self,
+        lead: Lead,
+        trace: ConversationTrace,
+        trigger: HandoffTrigger,
+        detail: str,
+        *,
+        minor: bool,
+    ) -> None:
+        if state_machine.is_allowed(lead.lifecycle_state, LifecycleEvent.GATE_HELD):
+            await state_machine.apply_event(
+                self._session,
+                lead,
+                LifecycleEvent.GATE_HELD,
+                actor="system",
+                reason=trigger.value,
+            )
+        summary = (
+            "Confirmed under-18 in the age gate — held pending guidance. Bot has "
+            "stopped; needs the parent/guardian process. "
+            if minor
+            else "Opt-in/age answer was unreadable twice — bot parked the lead for "
+            "review rather than assuming consent. "
+        )
+        await notify_counselor(
+            self._session,
+            self._settings,
+            lead,
+            trigger=trigger,
+            summary=summary + f"({detail[:160]})",
+            context={"trace_id": str(trace.id), "consent_gate": lead.consent_gate.value},
         )
 
     @staticmethod

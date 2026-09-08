@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from app.config import Settings
-from app.models.enums import ConsentStatus, LifecycleState
+from app.models.enums import ConsentGate, ConsentStatus, LifecycleState
 from app.models.lead import Lead
 from app.scheduler.sweeps import (
     SweepDeps,
@@ -49,7 +49,10 @@ def deps(session, redis_client, wa_client):
 
 
 async def _lead(session, **kw) -> Lead:
-    defaults = dict(phone_e164=f"+9198123{utcnow().microsecond:05d}"[:14])
+    defaults = dict(
+        phone_e164=f"+9198123{utcnow().microsecond:05d}"[:14],
+        consent_gate=ConsentGate.CLEARED,
+    )
     defaults.update(kw)
     lead = Lead(**defaults)
     session.add(lead)

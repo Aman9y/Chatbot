@@ -22,7 +22,26 @@ class LifecycleState(StrEnum):
     NURTURE = "nurture"
     DORMANT = "dormant"
     HANDOFF = "handoff"
+    # Consent/age gate parked the lead pending a human (confirmed minor, or an
+    # opt-in/age answer the bot couldn't read twice). Bot stays silent.
+    GATE_HOLD = "gate_hold"
     OPTED_OUT = "opted_out"
+
+
+class ConsentGate(StrEnum):
+    """Pre-conversation opt-in + age gate (build-plan §2 / DPDP).
+
+    A precondition the lead must pass before ANY sales/qualification turn runs —
+    NOT a second lifecycle machine. Only forward progress + terminal outcomes.
+    """
+
+    PENDING_OPT_IN = "pending_opt_in"   # consent ask owed / sent, awaiting a yes/no
+    PENDING_AGE = "pending_age"         # opted in, awaiting the 18+/under-18 answer
+    CLEARED = "cleared"                 # opted in + confirmed 18+ -> normal flow
+    REFUSED = "refused"                 # said no -> also OPTED_OUT
+    MINOR_HOLD = "minor_hold"           # confirmed under 18 -> held pending guidance
+    NEEDS_HUMAN = "needs_human"         # unreadable answer twice -> human review
+    NOT_REQUIRED = "not_required"       # gate disabled / not applicable (dev, placeholders)
 
 
 class LifecycleEvent(StrEnum):
@@ -35,6 +54,7 @@ class LifecycleEvent(StrEnum):
     SERVICE_WINDOW_EXPIRED = "service_window_expired"
     NURTURE_TIMEOUT = "nurture_timeout"
     RETRY_ROUNDS_EXHAUSTED = "retry_rounds_exhausted"
+    GATE_HELD = "gate_held"  # consent/age gate parked the lead for a human
     OPT_OUT = "opt_out"
 
 
@@ -122,6 +142,7 @@ class ConsentMethod(StrEnum):
     WEB_FORM = "web_form"
     INBOUND_STOP_KEYWORD = "inbound_stop_keyword"
     INBOUND_OPT_IN_KEYWORD = "inbound_opt_in_keyword"
+    CONVERSATIONAL_GATE = "conversational_gate"  # replied to the in-chat opt-in ask
     MANUAL_ENTRY = "manual_entry"
     API = "api"
 
@@ -178,6 +199,8 @@ class HandoffTrigger(StrEnum):
     BOOKING = "booking"
     PHASE_HANDOFF = "phase_handoff"
     HIGH_INTENT = "high_intent"
+    MINOR_HOLD = "minor_hold"          # confirmed under-18 in the age gate
+    CONSENT_REVIEW = "consent_review"  # opt-in/age answer unreadable twice
     GUARD_FALLBACK = "guard_fallback"
     ENGINE_ERROR = "engine_error"
     MANUAL = "manual"

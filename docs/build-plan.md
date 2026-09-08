@@ -52,6 +52,16 @@ instructions inside its prompt.
   severity tier as the financing and admission-guarantee rules above; enforced
   as a deterministic (Tier-1) Response Guard block, not prompt-only.
   (Rule 7, added 2026-09-08 — surfaced by topic-matrix-2 §9.)
+- No sales/qualification conversation runs until the lead passes a conversational
+  gate: (1) a plain opt-in ask, interpreted by the LLM/NLU layer (not string
+  matching) as yes / no / unclear; (2) an age check → 18+ / under-18 / unclear.
+  A clear no → respectful close + opt-out. A confirmed under-18 → stop, hold
+  pending guidance (`is_minor=true`, `minor_policy_status=pending_review`), flag
+  the counsellor — this is a SAFE PLACEHOLDER; the real minor process (parent
+  outreach, data handling) is an open legal question, not finalised in code.
+  An unclear answer is re-asked once, phrased differently; still unclear → parked
+  for a human. Never treat an unclear answer as a yes.
+  (Gate added 2026-09-08. Replaces the blanket refusal of all imported leads.)
 
 ## 3. Architecture
 

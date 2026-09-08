@@ -7,6 +7,11 @@ from app.scheduler.celery_app import celery_app
 from app.scheduler.runner import run_sweep
 
 
+@celery_app.task(name="app.scheduler.tasks.send_consent_asks")
+def send_consent_asks() -> dict:
+    return run_sweep("send_consent_asks", sweeps.send_consent_asks)
+
+
 @celery_app.task(name="app.scheduler.tasks.expire_windows")
 def expire_windows() -> dict:
     return run_sweep("expire_windows", sweeps.expire_windows)

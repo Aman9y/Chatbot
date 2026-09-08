@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from app.config import Settings
 from app.models.enums import (
+    ConsentGate,
     LifecycleState,
     MessageDirection,
     MessageStatus,
@@ -40,6 +41,7 @@ async def _run_turn(session, redis, s, wa, kb, text, *, reply_gap_min=2, priors=
         first_engaged_at=now - timedelta(minutes=30),
         last_outbound_at=now - timedelta(minutes=reply_gap_min),
         last_inbound_at=now,
+        consent_gate=ConsentGate.CLEARED,
     )
     session.add(lead)
     await session.flush()

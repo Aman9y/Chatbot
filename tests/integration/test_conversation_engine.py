@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from app.config import Settings
 from app.models.conversation_trace import ConversationTrace
 from app.models.enums import (
+    ConsentGate,
     LifecycleState,
     MessageDirection,
     MessageStatus,
@@ -40,6 +41,7 @@ async def _engaged_lead(session, redis, settings, *, phone="+919812345670", text
         full_name="Priya",
         lifecycle_state=LifecycleState.ENGAGED,
         first_engaged_at=utcnow(),
+        consent_gate=ConsentGate.CLEARED,
     )
     session.add(lead)
     await session.flush()

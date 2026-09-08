@@ -3,6 +3,7 @@ import pytest
 from app.config import get_settings
 from app.errors import OutreachBlocked, ServiceWindowClosed
 from app.models.enums import (
+    ConsentGate,
     ConsentStatus,
     LifecycleState,
     MinorPolicyStatus,
@@ -24,6 +25,7 @@ async def _verified_lead(session, phone="+919812345670") -> Lead:
         phone_e164=phone,
         consent_status=ConsentStatus.OPTED_IN,
         consent_verified=True,
+        consent_gate=ConsentGate.CLEARED,
     )
     session.add(lead)
     await session.flush()
