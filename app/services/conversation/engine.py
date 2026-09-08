@@ -25,6 +25,7 @@ from app.logging_config import get_logger, log_extra, mask_phone
 from app.models.conversation_trace import ConversationTrace
 from app.models.enums import (
     HandoffTrigger,
+    LeadScore,
     LifecycleEvent,
     LifecycleState,
     MessageDirection,
@@ -37,6 +38,8 @@ from app.models.message import Message
 from app.services import state_machine
 from app.services.conversation.booking import BookingSignal, detect_booking
 from app.services.conversation.context import build_turn_context
+from app.services.conversation.extraction import apply_to_lead, extract_qualifiers
+from app.services.conversation.scoring import ScoreInputs, score_lead
 from app.services.conversation.speaker import detect_speaker
 from app.services.guard.fallback import safe_fallback_message
 from app.services.guard.guard import GuardVerdict, ResponseGuard
@@ -260,6 +263,23 @@ class ConversationEngine:
         trace.speaker_detected = speaker
         trace.speaker_method = method
 
+        # Micro-qualification (sales-playbook Part 6) — pull the counsellor-useful
+        # facts out of the lead's own message, before we build the prompt so the
+        # fresh profile is in context. Never fails the turn.
+        try:
+            extraction = await extract_qualifiers(
+                text,
+                speaker=speaker,
+                llm=self._llm,
+                model=classifier_model(s),
+                use_llm=(s.llm_provider != "fake"),
+            )
+            qualifier_changes = apply_to_lead(lead, extraction, s)
+        except Exception:  # noqa: BLE001 - extraction is best-effort
+            logger.exception("qualifier extraction failed for lead %s", lead.id)
+            qualifier_changes = {}
+        trace.extracted_qualifiers = qualifier_changes or None
+
         turn = await build_turn_context(
             self._session,
             lead,
@@ -317,6 +337,22 @@ class ConversationEngine:
             "format": booking.format,
         }
 
+        # Lead scoring (plan §3 pipeline) — derived signals for the counsellor
+        # queue. Best-effort; a scoring failure must not lose the reply.
+        try:
+            score_result = self._score_lead(lead, turn, text, booking.detected)
+            lead.interest_temperature = score_result.temperature
+            if lead.lead_score != score_result.score:
+                lead.lead_score = score_result.score
+            lead.lead_score_reason = score_result.reason[:255]
+            lead.lead_score_updated_at = utcnow()
+            trace.lead_score = score_result.score.value
+            trace.lead_score_reason = score_result.reason[:255]
+            trace.interest_temperature = score_result.temperature.value
+        except Exception:  # noqa: BLE001
+            logger.exception("lead scoring failed for lead %s", lead.id)
+            score_result = None
+
         if booking.detected and lead.lifecycle_state in (
             LifecycleState.ENGAGED,
             LifecycleState.NURTURE,
@@ -344,6 +380,29 @@ class ConversationEngine:
                     "time": booking.proposed_time,
                 },
             )
+        elif (
+            score_result is not None
+            and score_result.score == LeadScore.HIGH
+            and not lead.counsellor_cta_sent
+            and lead.lifecycle_state == LifecycleState.ENGAGED
+        ):
+            await notify_counselor(
+                self._session,
+                s,
+                lead,
+                trigger=HandoffTrigger.HIGH_INTENT,
+                summary=(
+                    "Hot qualified lead — worth an early counsellor reach-out. "
+                    f"{score_result.reason}. "
+                    f"Profile: {turn.profile_summary}. Last message: {text[:160]}"
+                ),
+                context={
+                    "trace_id": str(trace.id),
+                    "lead_score": score_result.score.value,
+                    "temperature": score_result.temperature.value,
+                },
+            )
+            lead.counsellor_cta_sent = True
         elif turn.engagement_phase == "handoff" and not lead.phase_handoff_notified:
             await notify_counselor(
                 self._session,
@@ -373,6 +432,24 @@ class ConversationEngine:
             outbound_message_id=outbound.id,
             trace_id=trace.id,
             booking_detected=booking.detected,
+        )
+
+    def _score_lead(self, lead: Lead, turn, text: str, booking_detected: bool):
+        inbound_count = sum(1 for m in turn.messages if m.role == "user")
+        minutes_since_last_bot: float | None = None
+        if lead.last_inbound_at and lead.last_outbound_at:
+            delta = (lead.last_inbound_at - lead.last_outbound_at).total_seconds() / 60
+            if delta >= 0:
+                minutes_since_last_bot = delta
+        return score_lead(
+            lead,
+            ScoreInputs(
+                latest_text=text,
+                inbound_count=inbound_count,
+                minutes_since_last_bot=minutes_since_last_bot,
+                booking_detected=booking_detected,
+                engagement_phase=turn.engagement_phase,
+            ),
         )
 
     async def _generate_guarded(

@@ -89,6 +89,27 @@ class EligibilityFlag(StrEnum):
     UNKNOWN = "unknown"
 
 
+class LeadScore(StrEnum):
+    """Counsellor-prioritisation signal (plan §3 lead-scoring pipeline).
+
+    Derived each turn from qualification completeness + eligibility + intent +
+    interest temperature. Not a lifecycle state — it only orders the counsellor
+    queue and gates the HIGH-intent CTA notification.
+    """
+
+    UNKNOWN = "unknown"
+    LOW = "low"
+    NURTURE = "nurture"
+    HIGH = "high"
+
+
+class LeadUrgency(StrEnum):
+    THIS_INTAKE = "this_intake"
+    NEXT_INTAKE = "next_intake"
+    UNDECIDED = "undecided"
+    UNKNOWN = "unknown"
+
+
 class ConsentStatus(StrEnum):
     UNKNOWN = "unknown"
     OPTED_IN = "opted_in"
@@ -156,6 +177,7 @@ class SentBy(StrEnum):
 class HandoffTrigger(StrEnum):
     BOOKING = "booking"
     PHASE_HANDOFF = "phase_handoff"
+    HIGH_INTENT = "high_intent"
     GUARD_FALLBACK = "guard_fallback"
     ENGINE_ERROR = "engine_error"
     MANUAL = "manual"

@@ -56,6 +56,12 @@ class ConversationTrace(UUIDMixin, TimestampMixin, Base):
     guard_verdict: Mapped[str | None] = mapped_column(String(32))
     guard_violations: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON)
 
+    # qualification + scoring (plan §3 / playbook Part 6)
+    extracted_qualifiers: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    lead_score: Mapped[str | None] = mapped_column(String(16))
+    lead_score_reason: Mapped[str | None] = mapped_column(String(255))
+    interest_temperature: Mapped[str | None] = mapped_column(String(16))
+
     # outcome
     final_action: Mapped[str] = mapped_column(String(32), nullable=False, default="skipped")
     final_text: Mapped[str | None] = mapped_column(Text)

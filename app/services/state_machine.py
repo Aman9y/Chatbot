@@ -122,6 +122,9 @@ async def apply_event(
         lead.nurture_round = 0
         lead.next_reengagement_at = None
         lead.dormant_at = None
+        # a fresh engagement re-arms the hot-lead CTA (score is recomputed the
+        # next turn anyway)
+        lead.counsellor_cta_sent = False
 
     transition = LifecycleTransition(
         lead_id=lead.id,

@@ -170,6 +170,16 @@ def show_lead(phone: str = typer.Argument(...)) -> None:
                 f"neet={lead.neet_score} {lead.neet_category.value}"
             )
             typer.echo(
+                f"  score       : {lead.lead_score.value}  "
+                f"temp={lead.interest_temperature.value}  "
+                f"({lead.lead_score_reason or '-'})"
+            )
+            typer.echo(
+                f"  qualifiers  : country={lead.target_country or '-'} "
+                f"budget={lead.budget_band or '-'} urgency={lead.urgency.value} "
+                f"parent_in_loop={lead.parent_in_loop}"
+            )
+            typer.echo(
                 f"  window open : {lead.service_window_open()}  "
                 f"expires={lead.service_window_expires_at}"
             )
@@ -312,6 +322,10 @@ def simulate(
                         f"verdict={trace.guard_verdict} "
                         f"kb={trace.kb_chunk_ids} "
                         f"tokens={trace.llm_input_tokens}/{trace.llm_output_tokens}"
+                    )
+                    typer.echo(
+                        f"score      : {trace.lead_score} ({trace.interest_temperature}) "
+                        f"qualifiers={trace.extracted_qualifiers or {}}"
                     )
                     if trace.guard_violations:
                         typer.secho(

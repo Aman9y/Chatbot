@@ -14,6 +14,8 @@ from app.models.enums import (
     EligibilityFlag,
     FunnelStage,
     InterestTemperature,
+    LeadScore,
+    LeadUrgency,
     LifecycleState,
     MinorPolicyStatus,
     MinorStatus,
@@ -84,8 +86,29 @@ class Lead(UUIDMixin, TimestampMixin, Base):
     target_country: Mapped[str | None] = mapped_column(String(80))
     budget_band: Mapped[str | None] = mapped_column(String(60))
     intake_year: Mapped[int | None] = mapped_column(Integer)
+    urgency: Mapped[LeadUrgency] = enum_column(
+        LeadUrgency, default=LeadUrgency.UNKNOWN, nullable=False
+    )
     interest_temperature: Mapped[InterestTemperature] = enum_column(
         InterestTemperature, default=InterestTemperature.UNKNOWN, nullable=False
+    )
+    # Soft signal: a parent has appeared in this thread at least once. Never
+    # un-set (plan §4 "parent-involved-in-thread" flag; role_hint is the
+    # per-turn speaker, this is sticky-once-true).
+    parent_in_loop: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    qualifiers_updated_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    # --- lead score (plan §3 scoring pipeline; critique A5 — a signal, not a
+    #     state). Recomputed each turn, written here for the counsellor queue.
+    lead_score: Mapped[LeadScore] = enum_column(
+        LeadScore, default=LeadScore.UNKNOWN, nullable=False, index=True
+    )
+    lead_score_reason: Mapped[str | None] = mapped_column(String(255))
+    lead_score_updated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # HIGH-intent counsellor CTA fired once (so a hot lead is flagged early
+    # without spamming the counsellor every turn).
+    counsellor_cta_sent: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
     )
     # Per-lead financing-disclosure clearance (plan §2). Default false = the bot
     # never mentions loan/EMI options for this lead; the guard enforces it.

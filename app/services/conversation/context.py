@@ -55,6 +55,10 @@ def _profile_summary(lead: Lead) -> str:
         parts.append(f"budget_band={lead.budget_band}")
     if lead.intake_year:
         parts.append(f"intake_year={lead.intake_year}")
+    if lead.urgency and lead.urgency.value != "unknown":
+        parts.append(f"urgency={lead.urgency.value}")
+    if lead.parent_in_loop:
+        parts.append("parent_in_loop=yes")
     return "; ".join(parts) or "nothing stated yet"
 
 
