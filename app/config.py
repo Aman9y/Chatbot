@@ -95,8 +95,11 @@ class Settings(BaseSettings):
     # LLM_PROVIDER=gemini. Free-tier key works for testing with synthetic leads;
     # swap to a paid key via the same var for production, no code change.
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
-    gemini_classifier_model: str = "gemini-2.5-flash-lite"
+    # "-latest" aliases track Google's current recommended flash models, so a new
+    # key never hits a retired pin. Set a pinned id (e.g. gemini-3.6-flash) in
+    # .env for reproducibility.
+    gemini_model: str = "gemini-flash-latest"
+    gemini_classifier_model: str = "gemini-flash-lite-latest"
     llm_temperature: float = 0.4
     llm_max_output_tokens: int = 1600
     llm_timeout_seconds: float = 40.0

@@ -140,6 +140,7 @@ async def test_gemini_adapter(gemini_stub):
     assert cfg.max_output_tokens == 500
     assert cfg.temperature == 0.4
     assert cfg.response_mime_type == "application/json"
+    assert cfg.automatic_function_calling.disable is True  # no tools -> silence AFC warning
 
 
 def test_gemini_requires_key_from_env():
@@ -187,6 +188,12 @@ def test_factory_selects_provider(gemini_stub):
         ).provider
         == "gemini"
     )
-    s = Settings(llm_provider="gemini")
-    assert reply_model(s) == "gemini-2.5-flash"
-    assert classifier_model(s) == "gemini-2.5-flash-lite"
+    s = Settings(
+        llm_provider="gemini",
+        gemini_model="gemini-x-flash",
+        gemini_classifier_model="gemini-x-lite",
+    )
+    assert reply_model(s) == "gemini-x-flash"
+    assert classifier_model(s) == "gemini-x-lite"
+    # the shipped default is the auto-tracking alias
+    assert Settings.model_fields["gemini_model"].default == "gemini-flash-latest"

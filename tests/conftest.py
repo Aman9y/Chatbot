@@ -8,10 +8,20 @@ import pytest
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("META_APP_SECRET", "test-app-secret")
 os.environ.setdefault("META_VERIFY_TOKEN", "test-verify-token")
-os.environ.setdefault("WHATSAPP_CLIENT", "fake")
 os.environ.setdefault("OUTREACH_REQUIRE_VERIFIED_CONSENT", "true")
 os.environ.setdefault("MINOR_DEFAULT_POLICY", "pending_review")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
+
+# Tests are hermetic: HARD-set (not setdefault — env vars win over the .env file,
+# and a developer's local .env may point at real infra) everything that would
+# otherwise reach out over the network — the offline LLM + WhatsApp fakes,
+# in-request conversation dispatch (no Celery/Redis), and blank provider keys.
+os.environ["LLM_PROVIDER"] = "fake"
+os.environ["WHATSAPP_CLIENT"] = "fake"
+os.environ["WEBHOOK_CONVERSATION_DISPATCH"] = "inline"
+os.environ["CONSENT_ASK_SWEEP_ENABLED"] = "false"
+for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
+    os.environ[_k] = ""
 
 import fakeredis.aioredis  # noqa: E402
 import httpx  # noqa: E402

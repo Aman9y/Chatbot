@@ -32,6 +32,7 @@ dependencies = [
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
+    "pytest-timeout>=2.3",
     "respx>=0.21",
     "fakeredis>=2.23",
     "ruff>=0.5",
@@ -46,6 +47,10 @@ include = ["app*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# a test that reaches for real infra (Redis/Celery/network) fails loudly instead
+# of hanging the whole run
+timeout = 60
+timeout_method = "thread"
 filterwarnings = [
     "ignore::DeprecationWarning:passlib",
 ]
