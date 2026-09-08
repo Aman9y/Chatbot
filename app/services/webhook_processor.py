@@ -213,11 +213,24 @@ class WebhookProcessor:
         return IngestResult("processed", 200, str(event.id))
 
     async def _run_pending_conversations(self) -> None:
-        """Invoke the conversation engine for each new inbound message, after the
+        """Hand each new inbound message to the conversation layer, after the
         webhook's own work is durably committed. Isolated from ingestion: an
-        engine error here is logged, never surfaced as a non-200."""
+        error here is logged, never surfaced as a non-200.
+
+        ``celery`` dispatch (production, build-plan §3): enqueue one turn task
+        per lead — the task applies the debounce window + per-lead lock. The
+        webhook returns 200 to Meta as soon as the enqueue is done.
+
+        ``inline`` dispatch (dev / tests / ``leadbot simulate``): run the engine
+        here, one message at a time.
+        """
 
         if not self._pending_conversations or not self._conversation_enabled:
+            return
+
+        if self._settings.webhook_conversation_dispatch == "celery":
+            self._enqueue_pending_turns()
+            self._pending_conversations.clear()
             return
 
         from app.services.conversation.engine import ConversationEngine
@@ -241,6 +254,22 @@ class WebhookProcessor:
                 logger.exception("conversation engine crashed for lead %s", lead_id)
                 await self._session.rollback()
         self._pending_conversations.clear()
+
+    def _enqueue_pending_turns(self) -> None:
+        seen: set[uuid.UUID] = set()
+        try:
+            from app.scheduler.conversation_tasks import process_lead_turn
+        except Exception:  # noqa: BLE001 - Celery not importable -> don't fail ingestion
+            logger.exception("could not import turn task; conversation skipped")
+            return
+        for lead_id, _ in self._pending_conversations:
+            if lead_id in seen:
+                continue
+            seen.add(lead_id)
+            try:
+                process_lead_turn.delay(str(lead_id))
+            except Exception:  # noqa: BLE001 - broker down -> log, never 500 the webhook
+                logger.exception("failed to enqueue turn for lead %s", lead_id)
 
     # -- helpers --------------------------------------------------------
     async def _create_event(

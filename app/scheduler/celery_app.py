@@ -12,7 +12,7 @@ celery_app = Celery(
     "leadbot",
     broker=_settings.broker_url,
     backend=_settings.result_backend,
-    include=["app.scheduler.tasks"],
+    include=["app.scheduler.tasks", "app.scheduler.conversation_tasks"],
 )
 
 celery_app.conf.update(

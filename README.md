@@ -30,6 +30,7 @@ Planning docs: [docs/build-plan.md](docs/build-plan.md),
 | **Models** | `households`, `leads`, `consent_records`, `messages`, `webhook_events`, `lifecycle_transitions` — incl. age/`is_minor`, consent audit trail, `human_owned`, per-message cost fields, phone dedup |
 | **State machine** | `app/services/state_machine.py` — one source of truth (plan §5). Pure `next_state()` + `apply_event()` with an audit row per transition. Funnel stage / engagement phase are *derived*, not stored. |
 | **Webhook** | `GET` verification handshake; `POST` with `X-Hub-Signature-256` HMAC check, payload-hash dedup (idempotent on `processed`, so a failed event is retried), per-`wamid` dedup, advance-only out-of-order status reconciliation, placeholder creation when a status arrives before its message |
+| **Turn concurrency** (build-plan §3) | 1) idempotency — the two dedup layers above; 2) debounce — `celery` dispatch acks Meta immediately then a `process_lead_turn` task waits `TURN_DEBOUNCE_MS` and merges a lead's rapid-fire messages into one turn (`engine.handle_pending_turn`, unmerged messages get a `merged` trace); 3) per-lead Redis lock (`LeadTurnLock`, TTL-bounded) held across engine + send — a second queued turn retries until it frees. `inline` dispatch (default, dev/tests/`simulate`) runs the engine in-request, one message at a time. |
 | **STOP / opt-out** | `app/services/stop_keywords.py` (multi-language, transliteration-aware) runs **before** any normal processing; sets a sticky `OPTED_OUT` state + consent record, closes the window |
 | **Outreach guard** | `app/services/outreach.py` `evaluate()` — hard-blocks opted-out, unverified consent, unknown consent, minor-policy-not-cleared, human-owned, handoff-in-progress. `persist_outbound()` also hard-refuses opted-out leads. |
 | **WhatsApp client** | `WhatsAppClient` ABC + `MetaWhatsAppClient` (real Graph API) + `FakeWhatsAppClient` (deterministic, default). Swap via `WHATSAPP_CLIENT`. |
@@ -197,6 +198,13 @@ printf '%s' '{"object":"whatsapp_business_account","entry":[{"id":"W","changes":
 
 When `LLM_PROVIDER`, a knowledge base, and a WhatsApp client are all wired (they
 are, by default with `fake`), a replayed inbound message triggers an auto-reply.
+
+With `WEBHOOK_CONVERSATION_DISPATCH=inline` (the code default, used by tests and
+`simulate`) the reply is produced inside the webhook request. With `=celery` (the
+`.env.example` / docker default) the webhook only enqueues `process_lead_turn`;
+the **worker must be running** for a reply to be sent, and the turn goes through
+the debounce + per-lead lock described above.
+
 See it without a webhook:
 
 ```bash

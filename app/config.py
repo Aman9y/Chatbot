@@ -100,6 +100,22 @@ class Settings(BaseSettings):
     kb_path: str = "app/knowledge/kb.yaml"
     kb_retrieval_k: int = 4
 
+    # --- turn dispatch / concurrency (build-plan §3) ----------------------
+    # "celery": webhook acks Meta immediately, then a Celery task processes the
+    #           turn with a debounce window + per-lead Redis lock (production).
+    # "inline": the webhook runs the engine in-request, one message at a time
+    #           (dev / tests / `leadbot simulate`).
+    webhook_conversation_dispatch: Literal["inline", "celery"] = "inline"
+    # After the webhook acks, wait this long before processing so rapid-fire
+    # messages from the same lead merge into one turn (build-plan §3.2).
+    turn_debounce_ms: int = 500
+    # Per-lead lock held from just before LLM processing until the outbound send
+    # completes (build-plan §3.3). TTL is the safety release if a worker dies.
+    turn_lock_ttl_seconds: int = 120
+    # Celery: how many times / how long a queued turn waits for the lock.
+    turn_lock_max_retries: int = 15
+    turn_lock_retry_seconds: float = 3.0
+
     # --- Response Guard (Phase 4) --------------------------------------
     guard_enabled: bool = True
     guard_llm_critic_enabled: bool = False

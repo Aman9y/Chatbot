@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
@@ -26,6 +27,8 @@ from app.models.enums import (
     HandoffTrigger,
     LifecycleEvent,
     LifecycleState,
+    MessageDirection,
+    MessageType,
     RoleHint,
     SentBy,
 )
@@ -48,6 +51,7 @@ from app.services.windows import WindowService
 logger = get_logger(__name__)
 
 _BOT_OWNED_STATES = {LifecycleState.HANDOFF, LifecycleState.OPTED_OUT}
+_TEXTUAL_TYPES = (MessageType.TEXT, MessageType.INTERACTIVE, MessageType.BUTTON)
 
 
 @dataclass
@@ -80,8 +84,63 @@ class ConversationEngine:
         self._guard = ResponseGuard(settings)
         self._windows = WindowService(redis, settings)
 
+    async def _pending_inbound(self, lead: Lead) -> list[Message]:
+        """Inbound text messages for this lead the engine has not acted on yet
+        (no ConversationTrace points at them). Ordered oldest-first."""
+
+        traced = (
+            select(ConversationTrace.inbound_message_id)
+            .where(ConversationTrace.lead_id == lead.id)
+            .where(ConversationTrace.inbound_message_id.is_not(None))
+        )
+        rows = await self._session.scalars(
+            select(Message)
+            .where(Message.lead_id == lead.id)
+            .where(Message.direction == MessageDirection.INBOUND)
+            .where(Message.message_type.in_(_TEXTUAL_TYPES))
+            .where(Message.body.is_not(None))
+            .where(Message.id.not_in(traced))
+            .order_by(Message.created_at)
+        )
+        return [m for m in rows if (m.body or "").strip()]
+
+    async def handle_pending_turn(self, lead: Lead) -> ConversationResult:
+        """Process every unanswered inbound message for the lead as ONE turn
+        (build-plan §3.2 debounce/merge). Called by the turn dispatcher after the
+        debounce window; the per-lead lock is already held by the caller."""
+
+        pending = await self._pending_inbound(lead)
+        if not pending:
+            return ConversationResult("skipped", skipped_reason="no_pending_inbound")
+
+        anchor = pending[-1]
+        merged_text = "\n".join(
+            (m.body or "").strip() for m in pending if (m.body or "").strip()
+        )
+        override = merged_text if len(pending) > 1 else None
+        result = await self.handle_inbound(lead, anchor, override_text=override)
+
+        if len(pending) > 1:
+            now = utcnow()
+            for m in pending[:-1]:
+                self._session.add(
+                    ConversationTrace(
+                        lead_id=lead.id,
+                        inbound_message_id=m.id,
+                        final_action="merged",
+                        skipped_reason=f"merged_into:{result.trace_id}",
+                        started_at=now,
+                        finished_at=now,
+                    )
+                )
+            await self._session.commit()
+            logger.info(
+                "merged %d rapid-fire messages into one turn", len(pending)
+            )
+        return result
+
     async def handle_inbound(
-        self, lead: Lead, inbound_message: Message
+        self, lead: Lead, inbound_message: Message, *, override_text: str | None = None
     ) -> ConversationResult:
         """Entry point. Assumes the inbound message is already committed by the
         webhook processor; runs in its own transaction and never raises."""
@@ -92,7 +151,7 @@ class ConversationEngine:
         message_id = inbound_message.id
 
         try:
-            return await self._run_with_trace(lead, inbound_message)
+            return await self._run_with_trace(lead, inbound_message, override_text)
         except Exception as exc:  # noqa: BLE001 - never propagate into webhook ingestion
             logger.exception("conversation engine failed for lead %s", lead_id)
             await self._session.rollback()
@@ -112,7 +171,7 @@ class ConversationEngine:
             )
 
     async def _run_with_trace(
-        self, lead: Lead, inbound_message: Message
+        self, lead: Lead, inbound_message: Message, override_text: str | None = None
     ) -> ConversationResult:
         trace = ConversationTrace(
             lead_id=lead.id,
@@ -123,7 +182,7 @@ class ConversationEngine:
         self._session.add(trace)
         await self._session.flush()
 
-        result = await self._run(lead, inbound_message, trace)
+        result = await self._run(lead, inbound_message, trace, override_text)
 
         trace.finished_at = utcnow()
         await self._session.commit()
@@ -137,7 +196,11 @@ class ConversationEngine:
         return ConversationResult("skipped", trace_id=trace.id, skipped_reason=reason)
 
     async def _run(
-        self, lead: Lead, inbound_message: Message, trace: ConversationTrace
+        self,
+        lead: Lead,
+        inbound_message: Message,
+        trace: ConversationTrace,
+        override_text: str | None = None,
     ) -> ConversationResult:
         s = self._settings
 
@@ -146,7 +209,9 @@ class ConversationEngine:
         if lead.lifecycle_state in _BOT_OWNED_STATES or lead.human_owned:
             return self._skip(trace, f"not_bot_owned:{lead.lifecycle_state.value}")
 
-        text = (inbound_message.body or "").strip()
+        text = (
+            override_text if override_text is not None else (inbound_message.body or "")
+        ).strip()
         if not text:
             return self._skip(trace, "no_text")
 
