@@ -22,3 +22,4 @@ dist/
 build/
 rewrite_history.py
 commit_msg.txt
+.local/

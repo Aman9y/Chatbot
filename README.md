@@ -15,6 +15,10 @@ FastAPI service + Postgres + Redis + Celery that:
   nudges, time-based phase escalation, and spaced `SILENT`/`NURTURE` re-open
   template rounds → `DORMANT` at the cap.
 
+**Run it:** [docs/RUNNING.md](docs/RUNNING.md) (local — `bash scripts/run-local.sh`
+for a no-Docker one-command run) · **Ship it:** [docs/DEPLOYING.md](docs/DEPLOYING.md)
+(OCI + Cloudflare).
+
 Planning docs: [docs/build-plan.md](docs/build-plan.md),
 [docs/plan-critique.md](docs/plan-critique.md),
 [docs/system-prompt.md](docs/system-prompt.md).
