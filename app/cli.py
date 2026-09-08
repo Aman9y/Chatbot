@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path
 
 import httpx
@@ -20,6 +21,20 @@ import typer
 
 from app.config import get_settings
 from app.security.signature import sign_body
+
+
+def _force_utf8_streams() -> None:
+    """Windows consoles default to cp1252, which cannot encode "₹" (and other
+    symbols that legitimately appear in config / lead data)."""
+
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):  # pragma: no cover - non-reconfigurable
+            pass
+
+
+_force_utf8_streams()
 
 app = typer.Typer(add_completion=False, help="MBBS Abroad Lead Bot operator CLI")
 
@@ -47,6 +62,8 @@ def check_config() -> None:
     typer.echo(f"neet_cutoff_general   : {settings.neet_cutoff_general}")
     typer.echo(f"neet_cutoff_obc       : {settings.neet_cutoff_obc}")
     typer.echo(f"stateable_cost_range  : {settings.stateable_cost_range}")
+    typer.echo(f"stateable_countries   : {settings.stateable_cost_countries}")
+    typer.echo(f"india_compare_range   : {settings.india_compare_cost_range}")
     typer.echo("")
     reply_model = (
         settings.openai_model

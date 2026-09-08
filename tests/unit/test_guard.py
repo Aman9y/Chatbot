@@ -64,6 +64,60 @@ def test_cost_within_configured_range_allowed():
     assert v.allowed
 
 
+def _range_ctx(**over) -> GuardContext:
+    base = dict(
+        conversation_text="",
+        stateable_range="₹30–35 lakh",
+        india_compare_range="₹80L–1.2Cr",
+        premium_countries=["Germany", "UK", "United States"],
+        stateable_countries=["Kazakhstan", "Uzbekistan"],
+    )
+    base.update(over)
+    return GuardContext(**base)
+
+
+def test_india_comparison_figure_allowed_in_india_context(guard):
+    ctx = _range_ctx(conversation_text="user: how does this compare to a private college in India?")
+    v = guard.check(
+        "Private MBBS in India runs around ₹80L–1.2Cr, versus roughly ₹30–35 lakh "
+        "for the Kazakhstan tier. Want to get the real numbers on a call?",
+        context=ctx,
+    )
+    assert v.allowed, v.rules
+
+
+def test_india_range_figure_blocked_without_india_context(guard):
+    ctx = _range_ctx(conversation_text="user: what does Georgia cost?")
+    v = guard.check("It's about ₹80 lakh to 1.2 crore.", context=ctx)
+    assert not v.allowed
+    assert "unapproved_cost_figure" in v.rules or "cost_outside_approved_range" in v.rules
+
+
+def test_kyrgyzstan_figure_blocked(guard):
+    ctx = _range_ctx(conversation_text="user: kyrgyzstan fees?")
+    v = guard.check("Kyrgyzstan is around 32 lakh all in.", context=ctx)
+    assert not v.allowed
+
+
+def test_payment_terms_blocked(guard, ctx):
+    v = guard.check(
+        "The token amount is non-refundable, but the tuition advance can be "
+        "refunded within 15 days.",
+        context=ctx,
+    )
+    assert not v.allowed
+    assert "payment_terms_disclosure" in v.rules
+
+
+def test_payment_terms_deflection_allowed(guard, ctx):
+    v = guard.check(
+        "Refund and payment terms are exactly the kind of thing the counsellor "
+        "puts in writing and explains on the call — shall I set one up?",
+        context=ctx,
+    )
+    assert v.allowed, v.rules
+
+
 def test_financing_blocked_unless_cleared(guard, ctx):
     assert not guard.check("We can arrange an education loan for you.", context=ctx).allowed
     ctx.financing_cleared = True

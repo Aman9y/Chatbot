@@ -19,13 +19,33 @@ def _stateable_cost_clause(settings: Settings) -> str:
     countries = ", ".join(settings.stateable_cost_country_list) or "the economical tier"
     if settings.stateable_cost_range:
         return (
-            f"For {countries} you may quote the approved range only: "
-            f"{settings.stateable_cost_range}. Nothing more precise, and nothing if "
-            "the knowledge snippet for that country is missing."
+            f"For {countries} ONLY, you may quote the approved range: "
+            f"{settings.stateable_cost_range}. Nothing more precise than that range. "
+            "For every other country — including Kyrgyzstan, Georgia, Russia and the "
+            "premium tier — do not state any figure; say the counsellor gives current "
+            "numbers on the call."
         )
     return (
         f"Even for {countries}, do NOT state a specific figure — the approved range "
         "is not configured yet. Say the counsellor gives current figures on the call."
+    )
+
+
+def _india_compare_clause(settings: Settings) -> str:
+    if not settings.india_compare_cost_range:
+        return (
+            "When asked to compare MBBS in India vs abroad, keep it qualitative — "
+            "private MBBS in India costs several times more than the economical tier "
+            "abroad — and let the counsellor give the actual numbers."
+        )
+    stateable = settings.stateable_cost_range or "the economical-tier figure"
+    return (
+        "When comparing MBBS in India vs abroad you may state the gap using these "
+        f"approved ranges only: private MBBS in India is roughly "
+        f"{settings.india_compare_cost_range}, versus about {stateable} for the "
+        "Kazakhstan/Uzbekistan tier abroad. No figure for any other country, and "
+        "nothing more precise than these ranges. Never state an individual Indian "
+        "college's fee."
     )
 
 
@@ -63,6 +83,7 @@ def render_system_prompt(settings: Settings) -> str:
         "{{premium_countries}}": ", ".join(settings.premium_cost_country_list),
         "{{stateable_cost_countries}}": ", ".join(settings.stateable_cost_country_list),
         "{{stateable_cost_clause}}": _stateable_cost_clause(settings),
+        "{{india_compare_clause}}": _india_compare_clause(settings),
         "{{neet_cutoff_clause}}": _neet_cutoff_clause(settings),
         "{{office_address}}": office,
         "{{booking_link_clause}}": booking_link_clause,

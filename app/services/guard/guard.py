@@ -28,6 +28,7 @@ class GuardContext:
     conversation_text: str = ""
     financing_cleared: bool = False
     stateable_range: str | None = None
+    india_compare_range: str | None = None
     premium_countries: list[str] = field(default_factory=list)
     stateable_countries: list[str] = field(default_factory=list)
 
@@ -71,6 +72,7 @@ class ResponseGuard:
         violations += self._check_length(text)
         violations += self._check_cost(text, ctx)
         violations += self._check_financing(text, ctx)
+        violations += self._check_payment_terms(text)
         violations += self._check_guarantees(text)
         violations += self._check_pg_cost(text)
         violations += self._check_meta_leak(text)
@@ -115,32 +117,59 @@ class ResponseGuard:
                 )
             ]
 
-        if not ctx.stateable_range:
+        # Which approved figure-set(s) are actually in scope for this reply?
+        # A range only applies when its subject is present:
+        #   - stateable tier range  -> a stateable country is named
+        #   - India-private range   -> the reply/turn is about MBBS in India
+        approved: list[tuple[str, set[str]]] = []
+        stateable_subject = detectors.premium_country_mentioned(
+            haystack, ctx.stateable_countries
+        )
+        if ctx.stateable_range and stateable_subject:
+            approved.append(
+                (f"{stateable_subject} tier", set(re.findall(r"\d+", ctx.stateable_range)))
+            )
+        if ctx.india_compare_range and detectors.india_context(haystack):
+            approved.append(
+                ("India-private comparison", set(re.findall(r"\d+", ctx.india_compare_range)))
+            )
+
+        if not approved:
             return [
                 Violation(
                     "unapproved_cost_figure",
                     ", ".join(figures),
-                    "specific cost figure but STATEABLE_COST_RANGE is not configured "
-                    "(plan §2 / critique) — no figure may be stated",
+                    "cost figure but no approved range applies to the country/"
+                    "context in scope (plan §2 — only the Kazakhstan/Uzbekistan tier "
+                    "and the India-vs-abroad comparison may carry a figure)",
                 )
             ]
 
-        # A range IS configured: only allow figures whose digits appear in the
-        # approved range string, and only when a stateable country is the subject.
-        allowed_tokens = set(re.findall(r"\d+", ctx.stateable_range))
-        stateable_subject = detectors.premium_country_mentioned(
-            haystack, ctx.stateable_countries
-        )
+        allowed_tokens = set().union(*(digits for _, digits in approved))
         for fig in figures:
             fig_tokens = set(re.findall(r"\d+", fig))
-            if not stateable_subject or not fig_tokens.issubset(allowed_tokens):
+            if not fig_tokens or not fig_tokens.issubset(allowed_tokens):
                 return [
                     Violation(
                         "cost_outside_approved_range",
                         fig,
-                        f"figure not within approved range {ctx.stateable_range!r}",
+                        "figure not within the approved range(s): "
+                        + ", ".join(label for label, _ in approved),
                     )
                 ]
+        return []
+
+    def _check_payment_terms(self, text: str) -> list[Violation]:
+        hits = detectors.find_payment_terms(text)
+        if hits:
+            return [
+                Violation(
+                    "payment_terms_disclosure",
+                    ", ".join(hits),
+                    "states a payment schedule or refund/cancellation term "
+                    "(plan §2 rule 7: contractual — never stated in chat)",
+                )
+            ]
         return []
 
     def _check_financing(self, text: str, ctx: GuardContext) -> list[Violation]:

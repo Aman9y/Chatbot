@@ -8,6 +8,12 @@ def test_seed_kb_loads_clean():
     assert kb.size >= 8
 
 
+def test_new_fact_chunks_present_and_figure_free():
+    kb = load_knowledge_base("app/knowledge/kb.yaml", strict=True)
+    ids = {c.id for c in kb.retrieve("fmge nmc criteria india vs abroad admission", k=10)}
+    assert {"fmge-next", "nmc-criteria", "india-vs-abroad"} & ids
+
+
 def test_retrieval_ranks_relevant_chunks():
     kb = load_knowledge_base("app/knowledge/kb.yaml", strict=True)
     hits = kb.retrieve("my son wants MBBS in Georgia, is it safe?", k=3)

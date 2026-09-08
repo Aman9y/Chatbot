@@ -130,6 +130,7 @@ async def build_turn_context(
         conversation_text=recent_text,
         financing_cleared=lead.financing_cleared,
         stateable_range=settings.stateable_cost_range,
+        india_compare_range=settings.india_compare_cost_range,
         premium_countries=settings.premium_cost_country_list,
         stateable_countries=settings.stateable_cost_country_list,
     )

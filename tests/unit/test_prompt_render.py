@@ -38,3 +38,15 @@ def test_neet_clause_shown_when_configured():
         Settings(neet_cutoff_general=213, neet_cutoff_obc=175, neet_year=2025)
     )
     assert "213" in text and "175" in text
+
+
+def test_defaults_now_carry_confirmed_values():
+    text = render_system_prompt(Settings())
+    assert "213" in text and "175" in text and "2026" in text
+    assert "₹30–35 lakh" in text
+    assert "₹80L–1.2Cr" in text
+
+
+def test_india_compare_clause_qualitative_when_unset():
+    text = render_system_prompt(Settings(india_compare_cost_range=None))
+    assert "several times more" in text.lower()

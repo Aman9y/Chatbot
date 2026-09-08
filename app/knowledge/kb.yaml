@@ -99,14 +99,53 @@ chunks:
       and practise in India. The counsellor explains the full picture including
       what comes after MBBS.
 
+  - id: nmc-criteria
+    title: The NMC criteria a university must meet
+    tags: [nmc, criteria, recognition, eligibility, fmge, next, university, rules]
+    text: >
+      For an MBBS-abroad degree to count toward Indian registration, the
+      university must meet all of the NMC criteria: the medium of instruction is
+      English; the course is a single combined structure of five years of study
+      plus one year of internship (5+1); there is no mid-course transfer to
+      another college; the university is listed with the WHO / World Directory of
+      Medical Schools; it has its own or a permanently affiliated teaching
+      hospital; and its graduates are eligible to practise medicine in that
+      country. The counsellor checks every one of these for any university on your
+      shortlist.
+
+  - id: fmge-next
+    title: FMGE / NExT licensing exam
+    tags: [fmge, next, licensing, exam, attempts, pass, internship, practise, india]
+    text: >
+      To practise in India after MBBS abroad you clear the screening exam —
+      currently the FMGE, moving to the NExT. The FMGE now allows three attempts
+      per year (it used to be two), with a pass mark of 50% on a 300-mark paper,
+      followed by a one-year paid internship in India. How students do on it
+      depends heavily on which university they did MBBS at, which is exactly why
+      choosing the right university upfront matters.
+
+  - id: india-vs-abroad
+    title: MBBS in India vs MBBS abroad
+    tags: [india, abroad, comparison, cost, private, government, value, fmge]
+    text: >
+      For a student who qualified NEET but is short of a government MBBS seat,
+      private MBBS in India costs several times more than the economical-tier
+      abroad route (Kazakhstan / Uzbekistan). A recognised university abroad plus
+      the FMGE / NExT route is often far more affordable than a private Indian
+      college. Exact figures depend on the specific colleges and universities in
+      play — the counsellor runs the real numbers for your case.
+
   - id: admission-process
     title: How admission works
     tags: [admission, process, documents, application, timeline, intake]
     text: >
       Admission usually needs NEET result, Class 10 and 12 marksheets, passport
-      and a few university forms. Timelines depend on the intake. We do not
-      guarantee admission, a specific university or a specific intake — the
-      counsellor assesses your profile and tells you what is realistic.
+      and a few university forms. For a UG MBBS student applying to study abroad
+      the process — documents, offer letter, nominal fee, conditional admission
+      and invitation, passport, visa, ticket, travel — usually takes around 28
+      days end to end, though it depends on the intake. We do not guarantee
+      admission, a specific university or a specific intake — the counsellor
+      assesses your profile and tells you what is realistic.
 
   - id: why-call
     title: What the counsellor covers on the call

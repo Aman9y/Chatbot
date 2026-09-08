@@ -59,14 +59,19 @@ class Settings(BaseSettings):
     # --- minor policy (UNRESOLVED: critique A2) -----------------------------
     minor_default_policy: MinorPolicyStatus = MinorPolicyStatus.PENDING_REVIEW
 
-    # --- NEET eligibility (UNRESOLVED: critique B9) -------------------------
-    neet_year: int | None = None
-    neet_cutoff_general: int | None = None
-    neet_cutoff_obc: int | None = None
+    # --- NEET eligibility (confirmed 2026-09-08 by Hamza: 2026 cycle) ------
+    neet_year: int | None = 2026
+    neet_cutoff_general: int | None = 213
+    neet_cutoff_obc: int | None = 175
 
-    # --- stateable cost tiers (UNRESOLVED: plan §2) ------------------------
-    stateable_cost_countries: str = "Kazakhstan,Uzbekistan,Kyrgyzstan"
-    stateable_cost_range: str | None = None
+    # --- stateable cost tiers (confirmed 2026-09-08 by Hamza) -------------
+    # Kazakhstan + Uzbekistan only. Kyrgyzstan is NOT confirmed yet — it is
+    # deliberately absent so the guard treats any Kyrgyzstan figure as unstated.
+    stateable_cost_countries: str = "Kazakhstan,Uzbekistan"
+    stateable_cost_range: str | None = "₹30–35 lakh"
+    # India-private MBBS range, stateable only as the India-vs-abroad comparison
+    # (plan §2 / topic-matrix-2 §6). Confirmed 2026-09-08 by Hamza.
+    india_compare_cost_range: str | None = "₹80L–1.2Cr"
 
     # --- opt-out keywords --------------------------------------------------
     stop_keywords: str = "<defaults>"
@@ -158,7 +163,7 @@ class Settings(BaseSettings):
             return None
         return v
 
-    @field_validator("stateable_cost_range", mode="before")
+    @field_validator("stateable_cost_range", "india_compare_cost_range", mode="before")
     @classmethod
     def _blank_str_to_none(cls, v: object) -> object:
         if isinstance(v, str) and not v.strip():

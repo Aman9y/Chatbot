@@ -70,6 +70,23 @@ def find_money(text: str) -> list[str]:
     return seen
 
 
+# --- India-comparison context ----------------------------------------
+
+_INDIA_CONTEXT = re.compile(
+    r"\b(india|indian|domestic|back home|private (?:medical )?colleges?|"
+    r"private (?:medical )?colleges?|deemed (?:university|college)|mgmt quota|"
+    r"management quota|neet[- ]?ug seat|government seat)\b",
+    re.IGNORECASE,
+)
+
+
+def india_context(text: str) -> bool:
+    """True when the text is talking about MBBS *in India* — the only context in
+    which the India-private cost range may be stated (plan §2 comparison use)."""
+
+    return bool(_INDIA_CONTEXT.search(text))
+
+
 # --- premium countries -------------------------------------------------
 
 def premium_country_mentioned(text: str, premium_countries: list[str]) -> str | None:
@@ -96,6 +113,46 @@ _FINANCING = re.compile(
 
 def find_financing(text: str) -> list[str]:
     return [m.group(0) for m in _FINANCING.finditer(text)]
+
+
+# --- payment schedules / refund + cancellation terms (plan §2 rule 7) --
+
+_PAYMENT_TERM = re.compile(
+    r"\b(refunds?|refundable|refunded|refunding|non[- ]?refundable|"
+    r"cancellation (?:policy|fee|fees|charges?|terms?|penalty|penalties)|"
+    r"cancell?ation (?:is|will)|"
+    r"payment (?:schedule|plan|terms?|milestones?|structure|breakup|break[- ]?up)|"
+    r"part[- ]payment|part[- ]payments|money[- ]back|"
+    r"forfeit|forfeited|forfeits|forfeiture|"
+    r"(?:deposit|advance|token|registration fee) is (?:fully |partially |non[- ]?)?"
+    r"(?:refundable|non[- ]?refundable|adjustable|adjusted)|"
+    r"पैसा वापस|रिफ़?ंड|वापसी|पैसे वापस)\b",
+    re.IGNORECASE,
+)
+# When the reply is DEFLECTING the topic to the counsellor / to writing, the
+# term word appears but no actual term is being stated — that is allowed.
+_PAYMENT_DEFLECTION = re.compile(
+    r"\b(counsel?lor|counsel?ling team|on (?:the|a|our) call|in person|in writing|"
+    r"over (?:the )?call|covers? (?:this|that|it|the)|explains?|walk (?:you )?through|"
+    r"goes? through|discuss(?:es|ed)?|not something (?:i|we) (?:do|handle|cover)|"
+    r"needs? to be in writing|proper(?:ly)? explained|shared? properly|"
+    r"the counsel?lor (?:covers|goes|explains|will))\b",
+    re.IGNORECASE,
+)
+
+
+def find_payment_terms(text: str) -> list[str]:
+    hits: list[str] = []
+    for m in _PAYMENT_TERM.finditer(text):
+        window = text[max(0, m.start() - 100) : m.end() + 100]
+        if _PAYMENT_DEFLECTION.search(window):
+            continue
+        hits.append(m.group(0))
+    seen: list[str] = []
+    for h in hits:
+        if h.lower() not in seen:
+            seen.append(h.lower())
+    return seen
 
 
 # --- admission / outcome guarantees ----------------------------------

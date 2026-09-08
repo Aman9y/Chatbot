@@ -9,7 +9,7 @@ FastAPI service + Postgres + Redis + Celery that:
   messages: speaker detection, KB retrieval, a rendered system prompt, booking
   detection → counsellor handoff, and a full decision trace per turn.
 - **Phase 4** — a deterministic **Response Guard** on every outbound reply
-  (premium-cost figures, financing, admission guarantees, PG cost, length),
+  (premium-cost figures, financing, payment/refund terms, admission guarantees, PG cost, length),
   with block → regenerate → safe-fallback.
 - **Phase 5 + 6** — a Celery scheduler: window-expiry → `SILENT`, in-window
   nudges, time-based phase escalation, and spaced `SILENT`/`NURTURE` re-open
@@ -36,7 +36,7 @@ Planning docs: [docs/build-plan.md](docs/build-plan.md),
 | **Importer** | `leadbot import-leads` — E.164 normalization, invalid rows collected not fatal, merge-on-reimport (idempotent), DOB/age → minor policy, `parent_phone`/`family_id` → households |
 | **Conversation engine** | `app/services/conversation/engine.py` — runs after ingestion commits; gates (autoreply on, bot-owned, window open, reply guard), speaker detection, KB retrieval, LLM draft, guard loop, auto-send, booking → HANDOFF + counsellor notification. Engine failure never fails ingestion. |
 | **LLM client** | `LLMClient` ABC + `AnthropicLLMClient` + `OpenAILLMClient` + `FakeLLMClient` (default). Pick via `LLM_PROVIDER`. Cheap classifier calls use a separate model. |
-| **Response Guard** | `app/services/guard/` — deterministic Tier-1 detectors (money figures incl. word-forms, premium-country scope, financing, guarantees, PG cost, meta-leak, length). `check()` is pure; the engine does block → regenerate (×`GUARD_REGENERATE_ATTEMPTS`) → `safe_fallback_message` + counsellor alert. |
+| **Response Guard** | `app/services/guard/` — deterministic Tier-1 detectors (money figures incl. word-forms, premium-country scope, approved stateable + India-comparison ranges, financing, payment/refund terms, guarantees, PG cost, meta-leak, length). `check()` is pure; the engine does block → regenerate (×`GUARD_REGENERATE_ATTEMPTS`) → `safe_fallback_message` + counsellor alert. |
 | **Knowledge base** | `app/knowledge/kb.yaml` (hand-written, pre-redacted seed) + keyword retrieval. A redaction lint re-runs the guard detectors on load and refuses any chunk with a blocked figure (critique B3). pgvector is Phase 8. |
 | **Decision trace** | `conversation_traces` — per inbound turn: speaker, phase, KB chunks, every draft + guard verdict, tokens, final action, booking, errors (critique C2). |
 | **Handoff** | `handoff_notifications` + `app/services/handoff.py` — log + optional `COUNSELOR_WEBHOOK_URL` POST. Triggers: booking, phase-handoff (24–48h), guard-fallback, engine-error. |
@@ -53,9 +53,15 @@ Run `leadbot check-config` to see the live list. These are the blockers from
 |---|---|
 | Consent audit of legacy leads (A1) | `OUTREACH_REQUIRE_VERIFIED_CONSENT=true` → every imported lead has `consent_verified=false` → **all bot outreach to them is blocked** |
 | DPDP / minor policy (A2) | `MINOR_DEFAULT_POLICY=pending_review` → detected minors are blocked from outreach |
-| Which NEET year + cutoffs (B9) | `NEET_YEAR` / `NEET_CUTOFF_*` unset → `eligibility_flag` computes as `unknown`; the system prompt tells the bot not to state a cutoff number |
-| Kazakhstan/Uzbekistan stateable cost | `STATEABLE_COST_RANGE` unset → the guard blocks **every** specific cost figure (not just premium); the bot pivots to "the counsellor gives current figures" |
-| Company / counsellor name (§7) | `COMPANY_NAME` / `COUNSELOR_NAME` unset → the system prompt renders "our team" / "our counsellor" |
+| Company / counsellor name (§7) | `COMPANY_NAME` / `COUNSELOR_NAME` unset → the system prompt renders "our team" / "our counsellor", and identity/credential questions stay generic (nothing invented) |
+
+**Resolved 2026-09-08 (Hamza):** NEET year + cutoffs (`NEET_YEAR=2026`,
+`NEET_CUTOFF_GENERAL=213`, `NEET_CUTOFF_OBC=175`); stateable cost tier
+(`STATEABLE_COST_RANGE=₹30–35 lakh` for Kazakhstan + Uzbekistan only —
+Kyrgyzstan stays unstated); India-vs-abroad comparison figure
+(`INDIA_COMPARE_COST_RANGE=₹80L–1.2Cr`). Build-plan §2 **rule 7** added:
+payment schedules and refund/cancellation terms are a deterministic guard block
+(`payment_terms_disclosure`).
 
 ---
 
