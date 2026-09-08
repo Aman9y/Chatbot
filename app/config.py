@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     whatsapp_rate_card: str = "{}"
 
     # --- conversation engine (Phase 3) -----------------------------------
-    llm_provider: Literal["fake", "anthropic", "openai"] = "fake"
+    llm_provider: Literal["fake", "anthropic", "openai", "gemini"] = "fake"
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
     anthropic_effort: str = "low"
@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
     openai_classifier_model: str = "gpt-4o-mini"
+    # Gemini: key from the GEMINI_API_KEY env var only — required when
+    # LLM_PROVIDER=gemini. Free-tier key works for testing with synthetic leads;
+    # swap to a paid key via the same var for production, no code change.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_classifier_model: str = "gemini-2.5-flash-lite"
     llm_temperature: float = 0.4
     llm_max_output_tokens: int = 1600
     llm_timeout_seconds: float = 40.0
@@ -301,12 +307,15 @@ class Settings(BaseSettings):
                 "COMPANY_NAME / COUNSELOR_NAME unset - system prompt renders generic "
                 "phrasing ('our team' / 'our counselor') - plan s7"
             )
-        if self.llm_provider != "fake" and not (
-            self.anthropic_api_key or self.openai_api_key
-        ):
+        _provider_key = {
+            "anthropic": ("ANTHROPIC_API_KEY", self.anthropic_api_key),
+            "openai": ("OPENAI_API_KEY", self.openai_api_key),
+            "gemini": ("GEMINI_API_KEY", self.gemini_api_key),
+        }.get(self.llm_provider)
+        if _provider_key and not _provider_key[1]:
             items.append(
-                f"LLM_PROVIDER={self.llm_provider} but no API key set "
-                "(ANTHROPIC_API_KEY / OPENAI_API_KEY) - conversation engine will error"
+                f"LLM_PROVIDER={self.llm_provider} but {_provider_key[0]} is not set "
+                "- conversation engine will error"
             )
         return items
 

@@ -14,16 +14,24 @@ def build_llm_client(settings: Settings) -> LLMClient:
         from app.services.llm.openai_client import OpenAILLMClient
 
         return OpenAILLMClient(settings)
+    if settings.llm_provider == "gemini":
+        from app.services.llm.gemini_client import GeminiLLMClient
+
+        return GeminiLLMClient(settings)
     return FakeLLMClient()
 
 
 def classifier_model(settings: Settings) -> str:
     if settings.llm_provider == "openai":
         return settings.openai_classifier_model
+    if settings.llm_provider == "gemini":
+        return settings.gemini_classifier_model
     return settings.anthropic_classifier_model
 
 
 def reply_model(settings: Settings) -> str:
     if settings.llm_provider == "openai":
         return settings.openai_model
+    if settings.llm_provider == "gemini":
+        return settings.gemini_model
     return settings.anthropic_model

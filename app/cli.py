@@ -67,13 +67,11 @@ def check_config() -> None:
     typer.echo(f"stateable_countries   : {settings.stateable_cost_countries}")
     typer.echo(f"india_compare_range   : {settings.india_compare_cost_range}")
     typer.echo("")
-    reply_model = (
-        settings.openai_model
-        if settings.llm_provider == "openai"
-        else settings.anthropic_model
-    )
+    from app.services.llm.factory import classifier_model, reply_model
+
     typer.echo(f"llm_provider          : {settings.llm_provider}")
-    typer.echo(f"reply_model           : {reply_model}")
+    typer.echo(f"reply_model           : {reply_model(settings)}")
+    typer.echo(f"classifier_model      : {classifier_model(settings)}")
     typer.echo(f"bot_autoreply_enabled : {settings.bot_autoreply_enabled}")
     typer.echo(f"guard_enabled         : {settings.guard_enabled}")
     typer.echo(f"guard_regenerate_attempts : {settings.guard_regenerate_attempts}")

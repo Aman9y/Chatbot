@@ -24,6 +24,7 @@ dependencies = [
     "pyyaml>=6.0",
     "anthropic>=1.4",
     "openai>=1.40",
+    "google-genai>=1.0",
     "celery[redis]>=5.3",
 ]
 
