@@ -75,10 +75,21 @@ def wa_client():
     return FakeWhatsAppClient()
 
 
-@pytest_asyncio.fixture
-async def api_client(engine, redis_client, wa_client):
-    """httpx client bound to the ASGI app with DB/redis/wa overridden."""
+@pytest.fixture
+def llm_client():
+    from app.services.llm.fake import FakeLLMClient
 
+    return FakeLLMClient()
+
+
+@pytest.fixture(scope="session")
+def knowledge_base():
+    from app.services.knowledge.yaml_kb import load_knowledge_base
+
+    return load_knowledge_base("app/knowledge/kb.yaml", strict=True)
+
+
+def _build_api_client(engine, redis_client, wa_client, *, llm=None, kb=None):
     from app.api import deps
     from app.main import create_app
 
@@ -93,7 +104,31 @@ async def api_client(engine, redis_client, wa_client):
     application.state.redis = redis_client
     application.state.wa_client = wa_client
     application.state.settings = get_settings()
+    if llm is not None:
+        application.state.llm_client = llm
+    if kb is not None:
+        application.state.knowledge_base = kb
+    return application
 
+
+@pytest_asyncio.fixture
+async def api_client(engine, redis_client, wa_client):
+    """ASGI client with the conversation engine NOT wired (Phase 2 surface)."""
+
+    application = _build_api_client(engine, redis_client, wa_client)
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        client.app = application  # type: ignore[attr-defined]
+        yield client
+
+
+@pytest_asyncio.fixture
+async def conversation_api_client(engine, redis_client, wa_client, llm_client, knowledge_base):
+    """ASGI client WITH the conversation engine wired (Phase 3/4 surface)."""
+
+    application = _build_api_client(
+        engine, redis_client, wa_client, llm=llm_client, kb=knowledge_base
+    )
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         client.app = application  # type: ignore[attr-defined]

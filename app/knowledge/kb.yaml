@@ -1,0 +1,128 @@
+# MBBS Abroad Lead Bot — knowledge base (Phase 3 seed).
+#
+# PRE-REDACTED per plan §2: no premium-country (Germany/UK/US) cost figures, no
+# PG cost figure, no financing/loan specifics. The ingestion lint in
+# app/services/knowledge/yaml_kb.py re-checks every chunk on load and refuses any
+# that contains a blocked figure — redaction is enforced, not trusted.
+#
+# This is hand-written seed content for developing and testing the conversation
+# engine. The real KB + pgvector retrieval is plan Phase 8. Nothing here should
+# be treated as verified counselling content until Aman signs off.
+
+chunks:
+  - id: overview
+    title: What MBBS abroad involves
+    tags: [overview, general, mbbs, abroad, study]
+    text: >
+      Many Indian students who have appeared for NEET pursue MBBS at recognised
+      universities abroad. The degree is typically five to six years including
+      internship. To practise in India afterwards, graduates clear the licensing
+      exam (currently FMGE, moving to NExT). The right country and university
+      depend on the student's NEET result, budget and preferences — our counsellor
+      maps that out on a call.
+
+  - id: eligibility-neet
+    title: NEET eligibility for the abroad route
+    tags: [eligibility, neet, cutoff, qualifying, score, marks]
+    text: >
+      To use the MBBS-abroad route an Indian student must have appeared for NEET
+      and met the qualifying cutoff for that year. Below that cutoff, both
+      government MBBS seats in India and the overseas route are closed for that
+      cycle; private MBBS in India can still be an option for families who can
+      fund it. We never tell a student they cannot become a doctor — but we are
+      honest about which routes are open. The counsellor confirms the exact
+      current cutoff and what it means for a specific score.
+
+  - id: country-georgia
+    title: MBBS in Georgia
+    tags: [georgia, country, europe, university]
+    text: >
+      Georgia is a popular destination — English-medium programmes, NMC-recognised
+      universities, a European setting and a straightforward admission process.
+      Intakes are usually in autumn and spring. Fees and living costs vary by
+      university and package; the counsellor shares the current figures for the
+      universities that fit your profile.
+
+  - id: country-russia
+    title: MBBS in Russia
+    tags: [russia, country, university, europe]
+    text: >
+      Russia has long hosted Indian medical students, with many NMC-recognised
+      state universities offering English-medium MBBS. Winters are cold and some
+      universities have a preparatory year. Costs differ widely between
+      universities — the counsellor walks through the options for your budget.
+
+  - id: country-kazakhstan
+    title: MBBS in Kazakhstan
+    tags: [kazakhstan, country, university, central asia, budget]
+    text: >
+      Kazakhstan is often chosen by families looking for a more economical route,
+      with NMC-recognised universities and English-medium teaching. It borders
+      India's region culturally and has a growing number of Indian students. The
+      counsellor gives you the current fee and living-cost figures for specific
+      universities.
+
+  - id: country-uzbekistan
+    title: MBBS in Uzbekistan
+    tags: [uzbekistan, country, university, central asia, budget]
+    text: >
+      Uzbekistan has become a common choice in the more economical tier, with
+      English-medium MBBS at recognised universities and a relatively simple
+      admission process. As with every country, exact costs depend on the
+      university and package, which the counsellor covers on the call.
+
+  - id: country-kyrgyzstan
+    title: MBBS in Kyrgyzstan
+    tags: [kyrgyzstan, country, university, central asia, budget]
+    text: >
+      Kyrgyzstan offers English-medium MBBS at NMC-recognised universities and is
+      generally in the more economical tier. The counsellor confirms current fees
+      and the university shortlist for your profile.
+
+  - id: country-premium
+    title: Germany, the UK, the US and other premium destinations
+    tags: [germany, uk, united kingdom, us, usa, united states, canada, australia, premium, cost]
+    text: >
+      Countries like Germany, the UK and the US have very different pathways,
+      entrance requirements, timelines and costs — they vary a lot by country and
+      by package, so it is not something to pin down over chat. Our counsellor
+      talks you through what each route actually involves and gives you the exact
+      numbers on a call.
+
+  - id: recognition-licensing
+    title: Recognition and practising in India
+    tags: [nmc, mci, recognition, fmge, next, license, licensing, practise, india]
+    text: >
+      Study only at universities recognised by the National Medical Commission
+      (NMC) if the plan is to return to India. Foreign medical graduates clear the
+      licensing exam — currently the FMGE, transitioning to the NExT — to register
+      and practise in India. The counsellor explains the full picture including
+      what comes after MBBS.
+
+  - id: admission-process
+    title: How admission works
+    tags: [admission, process, documents, application, timeline, intake]
+    text: >
+      Admission usually needs NEET result, Class 10 and 12 marksheets, passport
+      and a few university forms. Timelines depend on the intake. We do not
+      guarantee admission, a specific university or a specific intake — the
+      counsellor assesses your profile and tells you what is realistic.
+
+  - id: why-call
+    title: What the counsellor covers on the call
+    tags: [call, counsellor, booking, meeting, next step, help]
+    text: >
+      A short call with our counsellor covers the country and university shortlist
+      for your NEET result, current costs and packages, the admission timeline,
+      recognition and licensing, and the practical side — safety, food, language.
+      It is the fastest way to get accurate answers for your situation. Calls are
+      about 15 minutes; an in-person meeting at our office is also an option.
+
+  - id: faq-safety-food
+    title: Safety, food and language
+    tags: [safety, food, indian food, language, hostel, living, faq, parents]
+    text: >
+      Universities that host Indian students usually have Indian food available,
+      Indian student communities and hostel accommodation. Teaching in the
+      countries we work with is in English. Safety varies by city and university —
+      the counsellor gives you a candid view for each option.

@@ -153,6 +153,14 @@ class SentBy(StrEnum):
     LEAD = "lead"
 
 
+class HandoffTrigger(StrEnum):
+    BOOKING = "booking"
+    PHASE_HANDOFF = "phase_handoff"
+    GUARD_FALLBACK = "guard_fallback"
+    ENGINE_ERROR = "engine_error"
+    MANUAL = "manual"
+
+
 # Ordering used to reconcile out-of-order status webhooks. A status only
 # "advances" a message if its rank is strictly greater than the current one.
 STATUS_RANK: dict[MessageStatus, int] = {

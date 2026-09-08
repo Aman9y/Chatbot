@@ -46,6 +46,18 @@ def check_config() -> None:
     typer.echo(f"neet_cutoff_obc       : {settings.neet_cutoff_obc}")
     typer.echo(f"stateable_cost_range  : {settings.stateable_cost_range}")
     typer.echo("")
+    reply_model = (
+        settings.openai_model
+        if settings.llm_provider == "openai"
+        else settings.anthropic_model
+    )
+    typer.echo(f"llm_provider          : {settings.llm_provider}")
+    typer.echo(f"reply_model           : {reply_model}")
+    typer.echo(f"bot_autoreply_enabled : {settings.bot_autoreply_enabled}")
+    typer.echo(f"guard_enabled         : {settings.guard_enabled}")
+    typer.echo(f"guard_regenerate_attempts : {settings.guard_regenerate_attempts}")
+    typer.echo(f"kb_path               : {settings.kb_path}")
+    typer.echo("")
     unresolved = settings.unresolved_phase1_items
     if not unresolved:
         typer.secho("All tracked Phase-1 items resolved.", fg=typer.colors.GREEN)
@@ -198,6 +210,98 @@ def send_template(
         finally:
             await redis.aclose()
             await wa.aclose()
+
+    asyncio.run(_run())
+
+
+@app.command("simulate")
+def simulate(
+    phone: str = typer.Argument(..., help="lead phone (created + engaged if new)"),
+    message: str = typer.Argument(..., help="the inbound message text to simulate"),
+) -> None:
+    """Run one conversation turn locally: feed an inbound message to the engine
+    and print the bot's reply + the decision trace."""
+
+    async def _run() -> None:
+        import redis.asyncio as redis_asyncio
+        from sqlalchemy import select
+
+        from app.models.conversation_trace import ConversationTrace
+        from app.models.enums import (
+            LifecycleState,
+            MessageDirection,
+            MessageStatus,
+            MessageType,
+            SentBy,
+        )
+        from app.models.message import Message
+        from app.services import leads as leads_service
+        from app.services.conversation.engine import ConversationEngine
+        from app.services.knowledge.yaml_kb import load_knowledge_base
+        from app.services.llm.factory import build_llm_client
+        from app.services.phone import normalize_phone
+        from app.services.timeutils import utcnow
+        from app.services.whatsapp.factory import build_whatsapp_client
+        from app.services.windows import WindowService
+
+        settings = get_settings()
+        norm = normalize_phone(phone, settings.default_phone_region)
+        redis = redis_asyncio.from_url(settings.redis_url, decode_responses=True)
+        wa = build_whatsapp_client(settings)
+        llm = build_llm_client(settings)
+        kb = load_knowledge_base(settings.kb_path, strict=True)
+        try:
+            async with _session_scope() as session:
+                lead, created = await leads_service.find_or_create(
+                    session, norm, source="simulate"
+                )
+                if created or lead.lifecycle_state == LifecycleState.NEVER_CONTACTED:
+                    lead.lifecycle_state = LifecycleState.ENGAGED
+                    lead.first_engaged_at = lead.first_engaged_at or utcnow()
+                await WindowService(redis, settings).touch(lead)
+                inbound = Message(
+                    lead_id=lead.id,
+                    direction=MessageDirection.INBOUND,
+                    message_type=MessageType.TEXT,
+                    body=message,
+                    status=MessageStatus.RECEIVED,
+                    sent_by=SentBy.LEAD,
+                    wa_message_id=f"wamid.SIM-{utcnow().timestamp()}",
+                    status_history=[],
+                )
+                session.add(inbound)
+                await session.commit()
+
+                engine = ConversationEngine(
+                    session, redis, settings, llm=llm, kb=kb, wa_client=wa
+                )
+                result = await engine.handle_inbound(lead, inbound)
+
+                typer.echo(f"action     : {result.action}")
+                if result.skipped_reason:
+                    typer.echo(f"skipped    : {result.skipped_reason}")
+                if result.reply_text:
+                    typer.secho(f"bot reply  : {result.reply_text}", fg=typer.colors.GREEN)
+                typer.echo(f"booking    : {result.booking_detected}")
+
+                trace = await session.scalar(
+                    select(ConversationTrace).where(ConversationTrace.id == result.trace_id)
+                )
+                if trace:
+                    typer.echo(
+                        f"trace      : attempts={trace.draft_attempts} "
+                        f"verdict={trace.guard_verdict} "
+                        f"kb={trace.kb_chunk_ids} "
+                        f"tokens={trace.llm_input_tokens}/{trace.llm_output_tokens}"
+                    )
+                    if trace.guard_violations:
+                        typer.secho(
+                            f"violations : {trace.guard_violations}", fg=typer.colors.YELLOW
+                        )
+        finally:
+            await redis.aclose()
+            await wa.aclose()
+            await llm.aclose()
 
     asyncio.run(_run())
 

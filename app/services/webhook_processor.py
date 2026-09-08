@@ -6,13 +6,14 @@ Responsibilities:
   * per-message wamid dedup, per-status advance-only reconciliation
   * STOP / opt-out short-circuit BEFORE any normal processing (critique A3)
   * lead find-or-create, message persistence, 24h window, state transitions
-
-There is deliberately NO LLM / next-best-action here — that is Phase 3.
+  * AFTER the main commit, hand each new inbound message to the conversation
+    engine (Phase 3) — a failure there never fails ingestion.
 """
 
 from __future__ import annotations
 
 import hashlib
+import uuid
 from dataclasses import dataclass
 
 from pydantic import ValidationError
@@ -29,6 +30,8 @@ from app.models.enums import (
     MessageStatus,
     MessageType,
 )
+from app.models.lead import Lead
+from app.models.message import Message
 from app.models.webhook_event import WebhookEvent
 from app.schemas.webhook import (
     ChangeValue,
@@ -41,9 +44,12 @@ from app.services import consent as consent_service
 from app.services import leads as leads_service
 from app.services import messages as messages_service
 from app.services import state_machine
+from app.services.knowledge.base import KnowledgeBase
+from app.services.llm.base import LLMClient
 from app.services.phone import PhoneNormalizationError, normalize_wa_id
 from app.services.stop_keywords import is_opt_out, load_keywords
 from app.services.timeutils import from_unix, utcnow
+from app.services.whatsapp.base import WhatsAppClient
 from app.services.windows import WindowService
 
 logger = get_logger(__name__)
@@ -105,11 +111,35 @@ def _redact_headers(headers: dict[str, str]) -> dict[str, str]:
 
 
 class WebhookProcessor:
-    def __init__(self, session: AsyncSession, redis: Redis, settings: Settings) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        redis: Redis,
+        settings: Settings,
+        *,
+        llm: LLMClient | None = None,
+        kb: KnowledgeBase | None = None,
+        wa_client: WhatsAppClient | None = None,
+    ) -> None:
         self._session = session
+        self._redis = redis
         self._settings = settings
         self._windows = WindowService(redis, settings)
         self._stop_keywords = load_keywords(settings.stop_keywords)
+        self._llm = llm
+        self._kb = kb
+        self._wa_client = wa_client
+        # (lead_id, inbound_message_id) pairs to hand to the conversation engine
+        # AFTER the webhook's own work is committed.
+        self._pending_conversations: list[tuple[uuid.UUID, uuid.UUID]] = []
+
+    @property
+    def _conversation_enabled(self) -> bool:
+        return (
+            self._llm is not None
+            and self._kb is not None
+            and self._wa_client is not None
+        )
 
     # -- entrypoint -------------------------------------------------------
     async def ingest(
@@ -177,7 +207,40 @@ class WebhookProcessor:
         event.processed_at = utcnow()
         event.processing_error = None
         await self._session.commit()
+
+        await self._run_pending_conversations()
+
         return IngestResult("processed", 200, str(event.id))
+
+    async def _run_pending_conversations(self) -> None:
+        """Invoke the conversation engine for each new inbound message, after the
+        webhook's own work is durably committed. Isolated from ingestion: an
+        engine error here is logged, never surfaced as a non-200."""
+
+        if not self._pending_conversations or not self._conversation_enabled:
+            return
+
+        from app.services.conversation.engine import ConversationEngine
+
+        engine = ConversationEngine(
+            self._session,
+            self._redis,
+            self._settings,
+            llm=self._llm,
+            kb=self._kb,
+            wa_client=self._wa_client,
+        )
+        for lead_id, message_id in self._pending_conversations:
+            try:
+                lead = await self._session.get(Lead, lead_id)
+                message = await self._session.get(Message, message_id)
+                if lead is None or message is None:  # pragma: no cover - defensive
+                    continue
+                await engine.handle_inbound(lead, message)
+            except Exception:  # noqa: BLE001
+                logger.exception("conversation engine crashed for lead %s", lead_id)
+                await self._session.rollback()
+        self._pending_conversations.clear()
 
     # -- helpers --------------------------------------------------------
     async def _create_event(
@@ -322,6 +385,10 @@ class WebhookProcessor:
         except Exception:  # noqa: BLE001
             logger.exception("state transition failed for inbound %s", message.id)
             raise
+
+        # Queue for the conversation engine (runs post-commit).
+        if self._conversation_enabled and text:
+            self._pending_conversations.append((lead.id, persisted.id))
 
     async def _handle_status(self, status: StatusUpdate, event: WebhookEvent) -> None:
         if not status.recipient_id:

@@ -87,6 +87,9 @@ class Lead(UUIDMixin, TimestampMixin, Base):
     interest_temperature: Mapped[InterestTemperature] = enum_column(
         InterestTemperature, default=InterestTemperature.UNKNOWN, nullable=False
     )
+    # Per-lead financing-disclosure clearance (plan §2). Default false = the bot
+    # never mentions loan/EMI options for this lead; the guard enforces it.
+    financing_cleared: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # --- consent (critique A1, D2) -----------------------------------
     consent_status: Mapped[ConsentStatus] = enum_column(

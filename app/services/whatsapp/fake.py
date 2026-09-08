@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 from app.errors import WhatsAppAPIError
@@ -7,11 +8,12 @@ from app.services.whatsapp.base import SendResult, WhatsAppClient
 
 
 class FakeWhatsAppClient(WhatsAppClient):
-    """Deterministic in-memory client for tests and offline development.
+    """In-memory client for tests and offline development.
 
-    Records every send in ``self.sent``; produces stable ``wamid.FAKE######``
-    ids so tests can assert on them. Add a recipient to ``fail_on`` to simulate
-    an API failure for that number.
+    Records every send in ``self.sent``. Message ids are ``wamid.FAKE<run><n>``
+    — the per-instance ``<run>`` segment keeps them unique across process
+    restarts (the DB persists between CLI calls). Add a recipient to ``fail_on``
+    to simulate an API failure for that number.
     """
 
     name = "fake"
@@ -21,10 +23,11 @@ class FakeWhatsAppClient(WhatsAppClient):
         self.reads: list[str] = []
         self.fail_on: set[str] = set(fail_on or set())
         self._counter = 0
+        self._run = secrets.token_hex(4)
 
     def _next_id(self) -> str:
         self._counter += 1
-        return f"wamid.FAKE{self._counter:06d}"
+        return f"wamid.FAKE{self._run}{self._counter:06d}"
 
     def _guard(self, to: str) -> None:
         if to in self.fail_on or to.lstrip("+") in self.fail_on:

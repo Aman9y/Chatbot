@@ -77,6 +77,48 @@ class Settings(BaseSettings):
     # --- per-message cost rate card -------------------------------------
     whatsapp_rate_card: str = "{}"
 
+    # --- conversation engine (Phase 3) -----------------------------------
+    llm_provider: Literal["fake", "anthropic", "openai"] = "fake"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-opus-5"
+    anthropic_effort: str = "low"
+    anthropic_classifier_model: str = "claude-haiku-4-5"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+    openai_classifier_model: str = "gpt-4o-mini"
+    llm_temperature: float = 0.4
+    llm_max_output_tokens: int = 1600
+    llm_timeout_seconds: float = 40.0
+
+    bot_autoreply_enabled: bool = True
+    conversation_history_turns: int = 12
+    kb_path: str = "app/knowledge/kb.yaml"
+    kb_retrieval_k: int = 4
+
+    # --- Response Guard (Phase 4) --------------------------------------
+    guard_enabled: bool = True
+    guard_llm_critic_enabled: bool = False
+    guard_max_reply_chars: int = 700
+    guard_max_reply_words: int = 90
+    guard_regenerate_attempts: int = 1
+
+    # --- booking / handoff ---------------------------------------------
+    booking_detection_enabled: bool = True
+    counselor_webhook_url: str = ""
+
+    # --- system-prompt placeholders (plan §7 / docs/system-prompt.md) --
+    # Unset values render as safe generic phrasing ("our team" / "our counselor").
+    company_name: str = ""
+    counselor_name: str = ""
+    office_address: str = ""
+    maps_link: str = ""
+    booking_link: str = ""
+    bot_languages: str = "English, Hindi, Hinglish"
+    premium_cost_countries: str = "Germany,United Kingdom,UK,United States,US,USA,Canada,Australia"
+
+    # Default per-lead financing disclosure state (plan §2: default is "do not mention").
+    financing_cleared_default: bool = False
+
     @field_validator("minor_default_policy", mode="before")
     @classmethod
     def _blank_policy_to_default(cls, v: object) -> object:
@@ -102,6 +144,14 @@ class Settings(BaseSettings):
     @property
     def stateable_cost_country_list(self) -> list[str]:
         return [c.strip() for c in self.stateable_cost_countries.split(",") if c.strip()]
+
+    @property
+    def premium_cost_country_list(self) -> list[str]:
+        return [c.strip() for c in self.premium_cost_countries.split(",") if c.strip()]
+
+    @property
+    def language_list(self) -> list[str]:
+        return [s.strip() for s in self.bot_languages.split(",") if s.strip()]
 
     @property
     def rate_card(self) -> dict[str, Decimal]:
@@ -151,6 +201,18 @@ class Settings(BaseSettings):
             )
         if self.stateable_cost_range is None:
             items.append("STATEABLE_COST_RANGE (Kazakhstan/Uzbekistan tier figure) - plan s2")
+        if not self.company_name or not self.counselor_name:
+            items.append(
+                "COMPANY_NAME / COUNSELOR_NAME unset - system prompt renders generic "
+                "phrasing ('our team' / 'our counselor') - plan s7"
+            )
+        if self.llm_provider != "fake" and not (
+            self.anthropic_api_key or self.openai_api_key
+        ):
+            items.append(
+                f"LLM_PROVIDER={self.llm_provider} but no API key set "
+                "(ANTHROPIC_API_KEY / OPENAI_API_KEY) - conversation engine will error"
+            )
         return items
 
 

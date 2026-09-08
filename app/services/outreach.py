@@ -1,19 +1,25 @@
 """Outreach guard + send orchestration.
 
-`evaluate()` is the single gate every bot-initiated message must pass. It encodes
-the still-unresolved Phase 1 decisions as hard blocks:
+`evaluate()` is the single gate every bot-initiated message must pass. Hard
+blocks depend on `purpose`:
 
+  purpose="outreach" (business-initiated template / cold message):
   * opted-out lead                -> never contact (critique A1/A3)
   * consent not verified          -> blocked while OUTREACH_REQUIRE_VERIFIED_CONSENT
                                      (legacy consent audit pending — critique A1)
   * consent unknown / withdrawn   -> blocked
   * detected minor + policy not cleared -> blocked (DPDP undecided — critique A2)
   * human owns the thread / handoff in progress -> bot stays out (critique B6)
+
+  purpose="reply" (bot answering a lead-initiated message inside the 24h window):
+  * marketing-consent checks are dropped — the lead messaged us first
+  * opt-out, human-owned, handoff, and minor-policy blocks still apply
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,7 +74,9 @@ class OutreachService:
         self._windows = WindowService(redis, settings)
 
     # -- the guard -----------------------------------------------------
-    def evaluate(self, lead: Lead) -> ContactDecision:
+    def evaluate(
+        self, lead: Lead, *, purpose: Literal["outreach", "reply"] = "outreach"
+    ) -> ContactDecision:
         hard: list[str] = []
         warn: list[str] = []
 
@@ -77,12 +85,14 @@ class OutreachService:
             or lead.lifecycle_state == LifecycleState.OPTED_OUT
         ):
             hard.append("lead_opted_out")
-        if lead.consent_status == ConsentStatus.WITHDRAWN:
-            hard.append("consent_withdrawn")
-        if lead.consent_status == ConsentStatus.UNKNOWN:
-            hard.append("consent_unknown")
-        if self._settings.outreach_require_verified_consent and not lead.consent_verified:
-            hard.append("consent_not_verified")
+
+        if purpose == "outreach":
+            if lead.consent_status == ConsentStatus.WITHDRAWN:
+                hard.append("consent_withdrawn")
+            if lead.consent_status == ConsentStatus.UNKNOWN:
+                hard.append("consent_unknown")
+            if self._settings.outreach_require_verified_consent and not lead.consent_verified:
+                hard.append("consent_not_verified")
 
         if lead.is_minor == MinorStatus.YES and lead.minor_policy_status in (
             MinorPolicyStatus.PENDING_REVIEW,
@@ -105,8 +115,10 @@ class OutreachService:
             warnings=warn,
         )
 
-    def can_contact(self, lead: Lead) -> bool:
-        return self.evaluate(lead).allowed
+    def can_contact(
+        self, lead: Lead, *, purpose: Literal["outreach", "reply"] = "outreach"
+    ) -> bool:
+        return self.evaluate(lead, purpose=purpose).allowed
 
     # -- sends -------------------------------------------------------
     async def send_template(
@@ -173,9 +185,11 @@ class OutreachService:
         actor: SentBy = SentBy.BOT,
         reason: str | None = None,
         require_open_window: bool | None = None,
+        purpose: Literal["outreach", "reply"] = "outreach",
+        commit: bool = True,
         now=None,
     ) -> Message:
-        self.evaluate(lead).raise_if_blocked()
+        self.evaluate(lead, purpose=purpose).raise_if_blocked()
 
         if require_open_window is None:
             require_open_window = actor == SentBy.BOT
@@ -202,5 +216,6 @@ class OutreachService:
             reason=reason or "free-form reply",
             now=now,
         )
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
         return message

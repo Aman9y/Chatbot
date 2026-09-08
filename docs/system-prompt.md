@@ -1,12 +1,20 @@
 # System Prompt — MBBS Abroad Lead Bot
 
-Version: 0.1 (draft) · Owner: Aman · Last updated: 2026-09-07
+Version: 0.2 · Owner: Aman · Last updated: 2026-09-08
 
-This is the bot's behavior contract (plan §7/§8). It is written to be loaded as
-the `system` message for the in-window conversational LLM (plan Phase 3). The
-deterministic rules in [§2 of the plan](build-plan.md) are *also* enforced in code
-by the Response Guard (Phase 4) — this prompt is the first line, the guard is the
-backstop. See [plan-critique.md](plan-critique.md) §B1 for which rules are which.
+This is the bot's behavior contract (plan §7/§8), loaded as the `system` message
+for the in-window conversational LLM. The deterministic rules in
+[§2 of the plan](build-plan.md) are *also* enforced in code by the Response Guard
+(Phase 4) — this prompt is the first line, the guard is the backstop. See
+[plan-critique.md](plan-critique.md) §B1 for which rules are which.
+
+> **Implemented (Phase 3):** the operational copy of the `### PROMPT` body lives
+> at `app/prompts/system_prompt.md`. It is rendered at runtime by
+> `app/services/conversation/prompt.py`, which fills the `{{placeholders}}` from
+> `Settings` (env vars, not `config/bot.yaml`). Per-turn context (`speaker`,
+> `engagement_phase`, `eligibility_flag`, KB snippets, known profile) is appended
+> to the system prompt each turn by `app/services/conversation/context.py`, not
+> injected as `<angle-brace>` variables. Keep this doc and that file in sync.
 
 ---
 

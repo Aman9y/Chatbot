@@ -1,9 +1,16 @@
-# MBBS Abroad Lead Bot — Phase 2
+# MBBS Abroad Lead Bot — Phases 2–4
 
-The ingestion pipe: FastAPI service + Postgres + Redis that receives WhatsApp
-Cloud API webhooks, persists every message, runs one centralized lead state
-machine, imports the ~1,200 legacy leads, and enforces opt-out / consent /
-minor-policy rules on the outreach path. **No LLM yet** — that is Phase 3.
+FastAPI service + Postgres + Redis that:
+
+- **Phase 2** — receives WhatsApp Cloud API webhooks, persists every message, runs
+  one centralized lead state machine, imports the ~1,200 legacy leads, enforces
+  opt-out / consent / minor-policy rules.
+- **Phase 3** — an LLM conversation engine that auto-replies to in-window
+  messages: speaker detection, KB retrieval, a rendered system prompt, booking
+  detection → counsellor handoff, and a full decision trace per turn.
+- **Phase 4** — a deterministic **Response Guard** on every outbound reply
+  (premium-cost figures, financing, admission guarantees, PG cost, length),
+  with block → regenerate → safe-fallback.
 
 Planning docs: [docs/build-plan.md](docs/build-plan.md),
 [docs/plan-critique.md](docs/plan-critique.md),
@@ -24,8 +31,14 @@ Planning docs: [docs/build-plan.md](docs/build-plan.md),
 | **Outreach guard** | `app/services/outreach.py` `evaluate()` — hard-blocks opted-out, unverified consent, unknown consent, minor-policy-not-cleared, human-owned, handoff-in-progress. `persist_outbound()` also hard-refuses opted-out leads. |
 | **WhatsApp client** | `WhatsAppClient` ABC + `MetaWhatsAppClient` (real Graph API) + `FakeWhatsAppClient` (deterministic, default). Swap via `WHATSAPP_CLIENT`. |
 | **Importer** | `leadbot import-leads` — E.164 normalization, invalid rows collected not fatal, merge-on-reimport (idempotent), DOB/age → minor policy, `parent_phone`/`family_id` → households |
-| **CLI** | `leadbot check-config / import-leads / replay-webhook / show-lead / send-template` |
-| **Tests** | 119 tests (`pytest`), unit + integration, real Alembic migration exercised in a subprocess |
+| **Conversation engine** | `app/services/conversation/engine.py` — runs after ingestion commits; gates (autoreply on, bot-owned, window open, reply guard), speaker detection, KB retrieval, LLM draft, guard loop, auto-send, booking → HANDOFF + counsellor notification. Engine failure never fails ingestion. |
+| **LLM client** | `LLMClient` ABC + `AnthropicLLMClient` + `OpenAILLMClient` + `FakeLLMClient` (default). Pick via `LLM_PROVIDER`. Cheap classifier calls use a separate model. |
+| **Response Guard** | `app/services/guard/` — deterministic Tier-1 detectors (money figures incl. word-forms, premium-country scope, financing, guarantees, PG cost, meta-leak, length). `check()` is pure; the engine does block → regenerate (×`GUARD_REGENERATE_ATTEMPTS`) → `safe_fallback_message` + counsellor alert. |
+| **Knowledge base** | `app/knowledge/kb.yaml` (hand-written, pre-redacted seed) + keyword retrieval. A redaction lint re-runs the guard detectors on load and refuses any chunk with a blocked figure (critique B3). pgvector is Phase 8. |
+| **Decision trace** | `conversation_traces` — per inbound turn: speaker, phase, KB chunks, every draft + guard verdict, tokens, final action, booking, errors (critique C2). |
+| **Handoff** | `handoff_notifications` + `app/services/handoff.py` — log + optional `COUNSELOR_WEBHOOK_URL` POST. Triggers: booking, phase-handoff (24–48h), guard-fallback, engine-error. |
+| **CLI** | `leadbot check-config / import-leads / replay-webhook / show-lead / send-template / simulate` |
+| **Tests** | 217 tests (`pytest`) — unit + integration, incl. an adversarial guard suite (critique C1) and real Alembic migrations in a subprocess |
 
 ### Unresolved Phase 1 items — encoded as explicit config, not guessed
 
@@ -36,8 +49,9 @@ Run `leadbot check-config` to see the live list. These are the blockers from
 |---|---|
 | Consent audit of legacy leads (A1) | `OUTREACH_REQUIRE_VERIFIED_CONSENT=true` → every imported lead has `consent_verified=false` → **all bot outreach to them is blocked** |
 | DPDP / minor policy (A2) | `MINOR_DEFAULT_POLICY=pending_review` → detected minors are blocked from outreach |
-| Which NEET year + cutoffs (B9) | `NEET_YEAR` / `NEET_CUTOFF_*` unset → `eligibility_flag` computes as `unknown`, never guessed |
-| Kazakhstan/Uzbekistan stateable cost | `STATEABLE_COST_RANGE` unset → surfaced by `check-config`; not used by Phase 2 logic |
+| Which NEET year + cutoffs (B9) | `NEET_YEAR` / `NEET_CUTOFF_*` unset → `eligibility_flag` computes as `unknown`; the system prompt tells the bot not to state a cutoff number |
+| Kazakhstan/Uzbekistan stateable cost | `STATEABLE_COST_RANGE` unset → the guard blocks **every** specific cost figure (not just premium); the bot pivots to "the counsellor gives current figures" |
+| Company / counsellor name (§7) | `COMPANY_NAME` / `COUNSELOR_NAME` unset → the system prompt renders "our team" / "our counsellor" |
 
 ---
 
@@ -169,6 +183,44 @@ printf '%s' '{"object":"whatsapp_business_account","entry":[{"id":"W","changes":
 
 ---
 
+## Conversation engine (Phases 3–4)
+
+When `LLM_PROVIDER`, a knowledge base, and a WhatsApp client are all wired (they
+are, by default with `fake`), a replayed inbound message triggers an auto-reply.
+See it without a webhook:
+
+```bash
+.venv/Scripts/python.exe -m app.cli simulate +919812345670 "my son wants MBBS in Georgia, is it safe?"
+```
+
+```
+action     : sent
+bot reply  : Thanks for reaching out! ... Would a quick call with our counsellor tomorrow work?
+booking    : False
+trace      : attempts=1 verdict=allowed kb=['country-georgia', 'overview', ...] tokens=1366/23
+```
+
+`simulate` with the `fake` provider always returns the same canned reply. To see
+the **Response Guard** block a bad reply, run the adversarial tests
+(`tests/integration/test_guard_adversarial.py`) or point at a real provider:
+
+```bash
+# .env
+LLM_PROVIDER=anthropic          # or: openai
+ANTHROPIC_API_KEY=sk-ant-...    # or: OPENAI_API_KEY=sk-...
+COMPANY_NAME=YourCo
+COUNSELOR_NAME=Dr. Rao
+```
+
+The guard runs identically for every provider. Blocked-then-unfixable replies
+send a canned fallback and queue a `handoff_notifications` row (delivered to
+`COUNSELOR_WEBHOOK_URL` if set, else logged). Every turn writes a
+`conversation_traces` row — inspect with `leadbot show-lead` or query the table.
+
+Mute the bot entirely with `BOT_AUTOREPLY_ENABLED=false` (ingestion still runs).
+
+---
+
 ## Tests
 
 ```bash
@@ -235,9 +287,16 @@ app/
     outreach.py           the outreach guard + send methods
     eligibility.py        NEET cutoff -> flag (or unknown)
     pricing.py            optional rate-card cost estimation
+    handoff.py            counsellor notifications (log / webhook)
     whatsapp/             WhatsAppClient ABC + meta + fake + factory
+    llm/                  LLMClient ABC + anthropic + openai + fake + factory
+    knowledge/            KnowledgeBase ABC + YAML KB + redaction lint
+    guard/                Response Guard — detectors, guard, safe fallback
+    conversation/         prompt render, speaker, context, booking, engine
+  knowledge/kb.yaml       hand-written pre-redacted seed KB
+  prompts/system_prompt.md  operational system prompt (rendered with config)
   importer/csv_importer.py
   cli.py                  operator CLI
-alembic/                  migration env + versions
+alembic/                  migration env + versions (0001, 0002)
 tests/                    unit/ + integration/ + fixtures/
 ```

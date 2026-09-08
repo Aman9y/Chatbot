@@ -2,6 +2,8 @@
 
 from app.db.base import Base
 from app.models.consent import ConsentRecord
+from app.models.conversation_trace import ConversationTrace
+from app.models.handoff import HandoffNotification
 from app.models.household import Household
 from app.models.lead import Lead
 from app.models.lifecycle import LifecycleTransition
@@ -11,6 +13,8 @@ from app.models.webhook_event import WebhookEvent
 __all__ = [
     "Base",
     "ConsentRecord",
+    "ConversationTrace",
+    "HandoffNotification",
     "Household",
     "Lead",
     "LifecycleTransition",
