@@ -61,6 +61,8 @@ class ConversationTrace(UUIDMixin, TimestampMixin, Base):
     lead_score: Mapped[str | None] = mapped_column(String(16))
     lead_score_reason: Mapped[str | None] = mapped_column(String(255))
     interest_temperature: Mapped[str | None] = mapped_column(String(16))
+    # behaviour layer: pace / tone-stage / cta-mode / topic handling / objection
+    turn_signals: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     # outcome
     final_action: Mapped[str] = mapped_column(String(32), nullable=False, default="skipped")

@@ -288,11 +288,25 @@ class ConversationEngine:
             speaker=speaker,
             speaker_method=method,
             latest_text=text,
+            minutes_since_last_bot=self._minutes_since_last_bot(lead),
         )
         trace.engagement_phase = turn.engagement_phase
         trace.kb_chunk_ids = [c.id for c in turn.kb_chunks]
         trace.llm_provider = self._llm.provider
         trace.llm_model = reply_model(s)
+        trace.turn_signals = {
+            "pace": turn.pace_plan.pace if turn.pace_plan else None,
+            "message_depth": turn.pace_plan.message_depth if turn.pace_plan else None,
+            "tone_stage": turn.pace_plan.tone_stage if turn.pace_plan else None,
+            "cta_mode": turn.pace_plan.cta_mode if turn.pace_plan else None,
+            "topic": turn.topic_match.rule.id if turn.topic_match else None,
+            "handling": turn.topic_match.handling if turn.topic_match else None,
+            "hard_deflect_also": [
+                r.id for r in (turn.topic_match.hard_deflect_topics if turn.topic_match else [])
+            ],
+            "high_intent": bool(turn.topic_match and turn.topic_match.high_intent),
+            "objection": turn.objection.id if turn.objection else None,
+        }
 
         final_text, verdict, used_fallback = await self._generate_guarded(turn, trace)
 
@@ -434,19 +448,24 @@ class ConversationEngine:
             booking_detected=booking.detected,
         )
 
-    def _score_lead(self, lead: Lead, turn, text: str, booking_detected: bool):
-        inbound_count = sum(1 for m in turn.messages if m.role == "user")
-        minutes_since_last_bot: float | None = None
+    @staticmethod
+    def _minutes_since_last_bot(lead: Lead) -> float | None:
+        """How long after our last message did the lead reply — the pace signal."""
+
         if lead.last_inbound_at and lead.last_outbound_at:
             delta = (lead.last_inbound_at - lead.last_outbound_at).total_seconds() / 60
             if delta >= 0:
-                minutes_since_last_bot = delta
+                return delta
+        return None
+
+    def _score_lead(self, lead: Lead, turn, text: str, booking_detected: bool):
+        inbound_count = sum(1 for m in turn.messages if m.role == "user")
         return score_lead(
             lead,
             ScoreInputs(
                 latest_text=text,
                 inbound_count=inbound_count,
-                minutes_since_last_bot=minutes_since_last_bot,
+                minutes_since_last_bot=self._minutes_since_last_bot(lead),
                 booking_detected=booking_detected,
                 engagement_phase=turn.engagement_phase,
             ),

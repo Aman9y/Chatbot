@@ -1,4 +1,10 @@
-"""Render the operational system prompt from app/prompts/system_prompt.md."""
+"""Render the operational system prompt from app/prompts/system_prompt.md.
+
+The static prompt is the behaviour contract (sales-playbook philosophy + the §2
+non-negotiables). Per-turn guidance — pace / CTA timing / tone stage / topic
+handling (combined topic matrix) / detected objection — is appended by
+``app/services/conversation/context.py`` from ``pacing.py`` and ``triage.py``.
+"""
 
 from __future__ import annotations
 
