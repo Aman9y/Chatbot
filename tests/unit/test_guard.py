@@ -137,3 +137,64 @@ def test_length_blocked(guard, ctx):
     v = guard.check(long_reply, context=ctx)
     assert not v.allowed
     assert "reply_too_long" in v.rules
+
+
+# --- approved-range figures must not be blocked for lacking a country name ---
+# Regression: _check_cost used to require a stateable COUNTRY NAME in the text
+# before the approved range applied at all, so a figure squarely inside
+# ₹30–35 lakh fell through to `unapproved_cost_figure` and the lead got the
+# canned safe-fallback instead of an answer.
+
+
+def test_approved_range_figure_allowed_without_country_named(guard):
+    ctx = _range_ctx(conversation_text="what if my budget is 30 lakh")
+    v = guard.check(
+        "That's a workable budget — ₹30–35 lakh covers the more economical "
+        "route. Shall I set up a quick call?",
+        context=ctx,
+    )
+    assert v.allowed, v.rules
+
+
+def test_plain_echo_of_in_range_budget_allowed(guard):
+    ctx = _range_ctx(conversation_text="what if my budget is 30 lakh")
+    v = guard.check("30 lakh is realistic for the economical tier.", context=ctx)
+    assert v.allowed, v.rules
+
+
+def test_out_of_range_figure_is_distinguishable_from_unconfigured(guard):
+    """An out-of-range figure must report the RANGE rule, not the catch-all —
+    otherwise a good-but-unquotable answer and a genuinely bad one are
+    indistinguishable in the trace."""
+
+    ctx = _range_ctx()
+    v = guard.check("You'd be looking at about 55 lakh all in.", context=ctx)
+    assert not v.allowed
+    assert v.rules == ["cost_outside_approved_range"]
+
+
+def test_pronoun_us_does_not_read_as_premium_country(guard):
+    ctx = _range_ctx()
+    v = guard.check(
+        "₹30–35 lakh is the usual range — let us set up a call.", context=ctx
+    )
+    assert v.allowed, v.rules
+
+
+@pytest.mark.parametrize(
+    "draft,conversation",
+    [
+        ("Kyrgyzstan is around ₹30–35 lakh.", "kyrgyzstan fees?"),
+        ("Georgia works out to about ₹30–35 lakh.", ""),
+        ("That's about ₹30–35 lakh.", "user: what does Russia cost?"),
+    ],
+)
+def test_approved_figure_still_blocked_beside_an_unpriceable_country(
+    guard, draft, conversation
+):
+    """An approved-tier figure must not ride alongside a country no approved
+    range covers — the lead would read it as that country's price."""
+
+    v = guard.check(draft, context=_range_ctx(conversation_text=conversation))
+    assert not v.allowed
+    assert "unapproved_cost_figure" in v.rules

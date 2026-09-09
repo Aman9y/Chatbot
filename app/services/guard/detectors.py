@@ -89,14 +89,64 @@ def india_context(text: str) -> bool:
 
 # --- premium countries -------------------------------------------------
 
+# Country tokens that collide with ordinary English words, so they only count as
+# a country when the case matches: "US" the country vs "us" the pronoun. Without
+# this, "let us set up a call" reads as a premium country being in scope and
+# every approved figure alongside it is blocked as a premium leak.
+_CASE_SENSITIVE_COUNTRY_CODES = {"us"}
+
+
 def premium_country_mentioned(text: str, premium_countries: list[str]) -> str | None:
-    lowered = text.lower()
     for country in premium_countries:
-        c = country.lower().strip()
+        c = country.strip()
         if not c:
             continue
-        if re.search(rf"\b{re.escape(c)}\b", lowered):
+        flags = 0 if c.lower() in _CASE_SENSITIVE_COUNTRY_CODES else re.IGNORECASE
+        if re.search(rf"\b{re.escape(c)}\b", text, flags):
             return country
+    return None
+
+
+# Countries this product actually discusses. Used to answer "is a country in
+# scope that we are not allowed to attach a figure to?" — i.e. anything named
+# here that is neither in STATEABLE_COST_COUNTRIES (approved to quote) nor in
+# PREMIUM_COST_COUNTRIES (never quote — handled separately, louder). Kept
+# data-driven so it stays correct when the config lists change.
+_KNOWN_COUNTRIES: tuple[str, ...] = (
+    "kazakhstan", "uzbekistan", "kyrgyzstan", "georgia", "russia", "armenia",
+    "belarus", "ukraine", "moldova", "poland", "latvia", "lithuania", "bulgaria",
+    "romania", "serbia", "bosnia", "turkey", "china", "bangladesh", "nepal",
+    "philippines", "egypt", "iran", "mauritius", "guyana",
+    "germany", "united kingdom", "uk", "united states", "usa", "canada",
+    "australia", "ireland", "new zealand",
+)
+
+
+def unpriceable_country_mentioned(
+    text: str,
+    *,
+    approved_countries: list[str],
+    premium_countries: list[str],
+) -> str | None:
+    """First known country in `text` that no approved cost range covers.
+
+    A figure must not ride alongside such a country even when the figure itself
+    is an approved-tier one — the lead would read it as that country's price.
+    Premium countries are exempt here only because they raise their own, louder
+    violation upstream (``premium_cost_disclosure``).
+    """
+
+    lowered = text.lower()
+    exempt = {
+        c.lower().strip()
+        for c in (*approved_countries, *premium_countries)
+        if c.strip()
+    }
+    for country in _KNOWN_COUNTRIES:
+        if country in exempt:
+            continue
+        if re.search(rf"\b{re.escape(country)}\b", lowered):
+            return country.title()
     return None
 
 

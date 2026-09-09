@@ -146,3 +146,26 @@ def test_meta_leak():
     assert detectors.find_meta_leak("as an AI language model I cannot")
     assert detectors.find_meta_leak("here is {{counselor_name}}")
     assert not detectors.find_meta_leak("our counsellor will help you")
+
+
+def test_unpriceable_country_mentioned():
+    approved = ["Kazakhstan", "Uzbekistan"]
+    premium = ["Germany", "UK", "US"]
+    call = detectors.unpriceable_country_mentioned
+    assert call("MBBS in Georgia", approved_countries=approved, premium_countries=premium) == "Georgia"
+    assert call("what about Kyrgyzstan", approved_countries=approved, premium_countries=premium) == "Kyrgyzstan"
+    # approved + premium countries are not "unpriceable" here (premium has its
+    # own, louder violation upstream)
+    assert call("Kazakhstan tier", approved_countries=approved, premium_countries=premium) is None
+    assert call("cost in Germany", approved_countries=approved, premium_countries=premium) is None
+    # no country at all
+    assert call("what if my budget is 30 lakh", approved_countries=approved, premium_countries=premium) is None
+    # the pronoun must not read as a country
+    assert call("let us set up a call", approved_countries=approved, premium_countries=premium) is None
+
+
+def test_premium_country_ignores_the_pronoun_us():
+    prem = ["Germany", "United States", "US", "USA"]
+    assert detectors.premium_country_mentioned("let us set up a call", prem) is None
+    assert detectors.premium_country_mentioned("US universities", prem) == "US"
+    assert detectors.premium_country_mentioned("cost in the usa", prem) == "USA"

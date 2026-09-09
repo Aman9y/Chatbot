@@ -13,6 +13,12 @@ from app.config import Settings
 from app.services.guard import detectors
 
 
+def _digit_runs(value: str) -> set[str]:
+    """Distinct digit runs in a figure or range: '₹30–35 lakh' -> {'30', '35'}."""
+
+    return set(re.findall(r"\d+", value))
+
+
 @dataclass(frozen=True)
 class Violation:
     rule: str
@@ -106,6 +112,8 @@ class ResponseGuard:
             return []
 
         haystack = f"{ctx.conversation_text}\n{text}"
+
+        # 1. Premium tier in scope -> no figure at all, whatever its value.
         premium = detectors.premium_country_mentioned(haystack, ctx.premium_countries)
         if premium:
             return [
@@ -117,21 +125,20 @@ class ResponseGuard:
                 )
             ]
 
-        # Which approved figure-set(s) are actually in scope for this reply?
-        # A range only applies when its subject is present:
-        #   - stateable tier range  -> a stateable country is named
-        #   - India-private range   -> the reply/turn is about MBBS in India
+        # 2. Which approved ranges exist. The stateable tier range is approved
+        #    copy in its own right: a figure inside it is allowed whether or not
+        #    the sentence happens to name the country. Requiring the country name
+        #    here was a false positive — "your ₹30-35 lakh budget works" got
+        #    blocked purely for not saying "Kazakhstan", and the lead got the
+        #    canned fallback instead of an answer. The India-private range stays
+        #    context-gated: outside an India comparison that figure means nothing.
         approved: list[tuple[str, set[str]]] = []
-        stateable_subject = detectors.premium_country_mentioned(
-            haystack, ctx.stateable_countries
-        )
-        if ctx.stateable_range and stateable_subject:
-            approved.append(
-                (f"{stateable_subject} tier", set(re.findall(r"\d+", ctx.stateable_range)))
-            )
+        if ctx.stateable_range:
+            tier = "/".join(c for c in ctx.stateable_countries if c) or "stateable"
+            approved.append((f"{tier} tier", _digit_runs(ctx.stateable_range)))
         if ctx.india_compare_range and detectors.india_context(haystack):
             approved.append(
-                ("India-private comparison", set(re.findall(r"\d+", ctx.india_compare_range)))
+                ("India-private comparison", _digit_runs(ctx.india_compare_range))
             )
 
         if not approved:
@@ -139,16 +146,33 @@ class ResponseGuard:
                 Violation(
                     "unapproved_cost_figure",
                     ", ".join(figures),
-                    "cost figure but no approved range applies to the country/"
-                    "context in scope (plan §2 — only the Kazakhstan/Uzbekistan tier "
-                    "and the India-vs-abroad comparison may carry a figure)",
+                    "cost figure but no approved cost range is configured "
+                    "(plan §2 — nothing may be quoted until one is)",
                 )
             ]
 
-        allowed_tokens = set().union(*(digits for _, digits in approved))
+        # 3. A country we may not price is in scope -> even an approved-tier
+        #    figure would read as *that* country's price.
+        unpriceable = detectors.unpriceable_country_mentioned(
+            haystack,
+            approved_countries=ctx.stateable_countries,
+            premium_countries=ctx.premium_countries,
+        )
+        if unpriceable:
+            return [
+                Violation(
+                    "unapproved_cost_figure",
+                    ", ".join(figures),
+                    f"cost figure while {unpriceable} is in scope — no approved "
+                    "range covers that country (plan §2)",
+                )
+            ]
+
+        # 4. The actual test: is every figure inside an approved range?
+        allowed = set().union(*(digits for _, digits in approved))
         for fig in figures:
-            fig_tokens = set(re.findall(r"\d+", fig))
-            if not fig_tokens or not fig_tokens.issubset(allowed_tokens):
+            fig_digits = _digit_runs(fig)
+            if not fig_digits or not fig_digits.issubset(allowed):
                 return [
                     Violation(
                         "cost_outside_approved_range",
