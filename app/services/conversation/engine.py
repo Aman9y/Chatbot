@@ -50,6 +50,7 @@ from app.services.conversation.consent_gate import (
     stated_age,
 )
 from app.services.conversation.context import build_turn_context
+from app.services.conversation.deflection import select_deflection
 from app.services.conversation.extraction import apply_to_lead, extract_qualifiers
 from app.services.conversation.scoring import ScoreInputs, score_lead
 from app.services.conversation.speaker import detect_speaker
@@ -377,6 +378,16 @@ class ConversationEngine:
             ],
             "high_intent": bool(turn.topic_match and turn.topic_match.high_intent),
             "objection": turn.objection.id if turn.objection else None,
+            "deflection": (
+                {
+                    "mode": turn.deflection.mode.num,
+                    "reason": turn.deflection.reason,
+                    "contact": turn.deflection.contact,
+                    "deflect_index": turn.deflection.deflect_index,
+                }
+                if turn.deflection
+                else None
+            ),
         }
 
         final_text, verdict, used_fallback = await self._generate_guarded(turn, trace)
@@ -801,8 +812,31 @@ class ConversationEngine:
         trace.guard_violations = verdict.as_dict()["violations"] if verdict else []
         trace.guard_verdict = "blocked_fallback"
         self._record_llm(trace, calls, in_tok, out_tok, latency)
+
+        fallback_plan = select_deflection(
+            topic_match=turn.topic_match,
+            objection=turn.objection,
+            speaker=turn.speaker,
+            deflect_index=turn.deflection.deflect_index if turn.deflection else 0,
+            guard_blocked_rules=verdict.rules if verdict else None,
+        )
+        if fallback_plan is not None:
+            trace.turn_signals = {
+                **(trace.turn_signals or {}),
+                "deflection": {
+                    "mode": fallback_plan.mode.num,
+                    "reason": fallback_plan.reason,
+                    "contact": fallback_plan.contact,
+                    "deflect_index": fallback_plan.deflect_index,
+                },
+            }
         return (
-            safe_fallback_message(s, engagement_phase=turn.engagement_phase),
+            safe_fallback_message(
+                s,
+                engagement_phase=turn.engagement_phase,
+                plan=fallback_plan,
+                prior_bot_text=turn.guard_context.prior_bot_text,
+            ),
             verdict,
             True,
         )

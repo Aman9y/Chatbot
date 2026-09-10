@@ -64,6 +64,11 @@ for the in-window conversational LLM. The deterministic rules in
 - `<financing_cleared>` — boolean for this lead (default false)
 - `<eligibility_flag>` — `above_cutoff` | `below_cutoff` | `unknown`, computed in
   code from `<known_profile>` + config, not by the LLM
+- **Deflection register** — when the turn is a deflect, the injected block names
+  one of 13 modes (picked by *why* we're deflecting), its voice example, and a
+  resolved contact directive (no contact / number / address). Escalation and the
+  "never repeat a sentence" rule are handled in code. Full design:
+  `docs/deflection-modes.md`; implementation `app/services/conversation/deflection.py`.
 
 ---
 

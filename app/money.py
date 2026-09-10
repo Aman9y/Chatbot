@@ -134,6 +134,11 @@ _RANGE_SPAN = re.compile(
 )
 
 
+def has_range_span(text: str) -> bool:
+    """True if `text` contains a written range span like '₹30–35 lakh'."""
+    return bool(_RANGE_SPAN.search(text or ""))
+
+
 def figures_in_lakh(text: str) -> list[float]:
     """Every money amount in `text`, as lakh. Range spans yield BOTH endpoints;
     the rest are parsed individually. A currency-marked bare number with no

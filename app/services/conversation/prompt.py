@@ -12,6 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.config import Settings
+from app.services.conversation.deflection import modes_reference
 
 _PROMPT_PATH = Path(__file__).resolve().parents[3] / "app" / "prompts" / "system_prompt.md"
 
@@ -159,6 +160,7 @@ def render_system_prompt(settings: Settings) -> str:
         "{{neet_cutoff_clause}}": _neet_cutoff_clause(settings),
         "{{about_clause}}": _about_clause(settings),
         "{{contact_clause}}": _contact_clause(settings),
+        "{{deflection_modes}}": modes_reference(),
         "{{office_address}}": office,
         "{{maps_link_clause}}": maps_link_clause,
     }

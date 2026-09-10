@@ -34,6 +34,11 @@ class GuardContext:
     """Everything the guard needs beyond the draft text itself."""
 
     conversation_text: str = ""
+    # the lead's latest inbound message on its own — used to tell "the bot is
+    # echoing the budget the lead just stated" from "the bot is quoting a range".
+    lead_message: str = ""
+    # recent bot side of the conversation (for the safe-fallback no-repeat check)
+    prior_bot_text: str = ""
     financing_cleared: bool = False
     # {country: (low_lakh, high_lakh)} — approved per-country ranges
     country_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
@@ -150,10 +155,30 @@ class ResponseGuard:
                 )
             ]
 
-        # 3. Strict: one country per cost reply. Two named countries + figures
-        #    means the lead can't tell which range is which.
         named = detectors.countries_named(text, ranged)
-        if len(named) >= 2:
+
+        # "The lead said their budget is 30 lakh — is that enough?" The bot
+        # confirming that figure against a couple of countries is NOT a
+        # range-quoting reply and must not be blocked as multi-country. It counts
+        # as an echo only when every figure the reply states was already in the
+        # lead's own last message and the reply introduces no range span.
+        lead_lakh = {
+            round(v, 1)
+            for v in money.figures_in_lakh(ctx.lead_message)
+            if not math.isnan(v)
+        }
+        reply_lakh = [v for v in money.figures_in_lakh(text) if not math.isnan(v)]
+        echoing_budget = (
+            bool(lead_lakh)
+            and bool(reply_lakh)
+            and not money.has_range_span(text)
+            and all(round(v, 1) in lead_lakh for v in reply_lakh)
+        )
+
+        # 3. Strict: one country per cost reply. Two named countries + figures
+        #    means the lead can't tell which range is which — unless the bot is
+        #    only echoing the lead's stated budget.
+        if len(named) >= 2 and not echoing_budget:
             return [
                 Violation(
                     "multi_country_cost",
@@ -163,8 +188,18 @@ class ResponseGuard:
                 )
             ]
 
-        # 4. Which single bound applies.
-        if named:
+        # 4. Which bound applies.
+        if echoing_budget and len(named) != 1:
+            country = None
+            pool = [ctx.country_bounds[c] for c in named] or list(ctx.country_bounds.values())
+            lo = min(b[0] for b in pool)
+            hi = max(b[1] for b in pool)
+            label = (
+                f"budget check against {', '.join(named)}"
+                if named
+                else f"general tier envelope (₹{lo:g}–{hi:g} lakh)"
+            )
+        elif named:
             country = named[0]
             lo, hi = ctx.country_bounds[country]
             label = f"{country} {ctx.country_display.get(country, '')}".strip()
@@ -202,10 +237,15 @@ class ResponseGuard:
 
         out: list[Violation] = []
 
-        # 6. Georgia / Nepal: the number for the director must be in the reply.
-        if country in ctx.sensitive_countries and not detectors.reply_offers_number(
+        # 6. Georgia / Nepal: the number for the director must be in the reply —
+        #    whether the figure is a quoted range or an echo of the lead's budget.
+        sensitive_named = country if country in ctx.sensitive_countries else next(
+            (c for c in named if c in ctx.sensitive_countries), None
+        )
+        if sensitive_named and not detectors.reply_offers_number(
             text, ctx.counselor_phone
         ):
+            country = sensitive_named
             out.append(
                 Violation(
                     "sensitive_cost_needs_contact",

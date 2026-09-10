@@ -165,6 +165,48 @@ def test_bare_in_envelope_budget_answer_allowed(guard):
     assert v.allowed, v.rules
 
 
+# --- budget echo: the bot confirming the lead's own stated figure -----
+def test_budget_echo_naming_two_cheap_countries_allowed(guard):
+    # lead said "30 lakh"; the bot confirms it against two economical countries.
+    # Not a range-quoting reply -> must NOT trip multi_country_cost.
+    v = guard.check(
+        "30 lakh is workable — that comfortably covers Uzbekistan or Kyrgyzstan, "
+        "including visa processing and accommodation setup. Which are you leaning "
+        "toward?",
+        context=_ctx(lead_message="my budget is 30 lakh, is that enough?"),
+    )
+    assert v.allowed, v.rules
+
+
+def test_budget_echo_still_bounds_the_figure(guard):
+    # lead said "20 lakh" — below every approved range; echo doesn't make it ok.
+    v = guard.check(
+        "20 lakh would cover Uzbekistan comfortably, visa included.",
+        context=_ctx(lead_message="can I do it in 20 lakh?"),
+    )
+    assert not v.allowed
+    assert "cost_outside_approved_range" in v.rules
+
+
+def test_budget_echo_naming_georgia_still_needs_number(guard):
+    v = guard.check(
+        "55 lakh could open up Georgia too, with visa and travel handled.",
+        context=_ctx(lead_message="what if my budget is 55 lakh?"),
+    )
+    assert not v.allowed
+    assert "sensitive_cost_needs_contact" in v.rules
+
+
+def test_bot_quoting_two_ranges_is_still_blocked_even_after_a_budget_message(guard):
+    # a range span the bot introduced is not an echo, whatever the lead said.
+    v = guard.check(
+        "Uzbekistan is ₹30–35 lakh and Georgia ₹38–55 lakh, visa included.",
+        context=_ctx(lead_message="my budget is around 30 lakh"),
+    )
+    assert not v.allowed
+    assert "multi_country_cost" in v.rules
+
+
 def test_countryless_figure_above_the_whole_envelope_blocked(guard):
     v = guard.check(
         "MBBS abroad is about 95 lakh with everything included.", context=_ctx()

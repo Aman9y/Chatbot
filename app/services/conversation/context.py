@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.models.conversation_trace import ConversationTrace
 from app.models.enums import MessageDirection, MessageType, RoleHint
 from app.models.lead import Lead
 from app.models.message import Message
+from app.services.conversation.deflection import DeflectionPlan, select_deflection, turn_hint
 from app.services.conversation.pacing import PacePlan, plan_pace
 from app.services.conversation.prompt import render_system_prompt
 from app.services.conversation.triage import (
@@ -44,6 +47,7 @@ class TurnContext:
     pace_plan: PacePlan | None = None
     topic_match: TopicMatch | None = None
     objection: Objection | None = None
+    deflection: DeflectionPlan | None = None
     extras: dict = field(default_factory=dict)
 
 
@@ -104,6 +108,66 @@ def _to_llm_messages(history: list[Message]) -> list[LLMMessage]:
     return out
 
 
+_FRUSTRATED = re.compile(
+    r"\b(you keep saying|same (?:answer|thing)|stop repeating|not helpful|"
+    r"useless|waste of (?:my )?time|just answer|answer the question|"
+    r"why (?:can'?t|won'?t) you|are you even|this is (?:annoying|frustrating)|"
+    r"frustrat\w*)\b|\?!|!!",
+    re.IGNORECASE,
+)
+
+_WORD = re.compile(r"[a-z0-9]+")
+_REPEAT_STOP = {
+    "the", "a", "an", "and", "or", "of", "to", "in", "for", "on", "is", "are",
+    "i", "my", "me", "you", "your", "we", "it", "this", "that", "do", "does",
+    "can", "what", "how", "please", "tell", "just", "so", "if", "will", "be",
+}
+
+
+def _content_tokens(text: str) -> set[str]:
+    return {t for t in _WORD.findall((text or "").lower()) if t not in _REPEAT_STOP and len(t) > 2}
+
+
+def _looks_like_repeat(latest: str, prior_user_texts: list[str]) -> bool:
+    cur = _content_tokens(latest)
+    if len(cur) < 2:
+        return False
+    for prev in prior_user_texts:
+        pv = _content_tokens(prev)
+        if not pv:
+            continue
+        overlap = len(cur & pv)
+        if overlap >= 2 and overlap / min(len(cur), len(pv)) >= 0.6:
+            return True
+    return False
+
+
+async def _deflection_history(
+    session: AsyncSession, lead: Lead, *, limit: int = 6
+) -> tuple[int, int | None]:
+    """(count of prior bot deflections in this conversation, the most recent mode)."""
+
+    rows = (
+        await session.scalars(
+            select(ConversationTrace.turn_signals)
+            .where(ConversationTrace.lead_id == lead.id)
+            .where(ConversationTrace.final_action.in_(["sent", "fallback_sent"]))
+            .order_by(ConversationTrace.created_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    count = 0
+    last_mode: int | None = None
+    for sig in rows:
+        d = (sig or {}).get("deflection") if isinstance(sig, dict) else None
+        if not d:
+            continue
+        count += 1
+        if last_mode is None:
+            last_mode = d.get("mode")
+    return count, last_mode
+
+
 async def build_turn_context(
     session: AsyncSession,
     lead: Lead,
@@ -136,6 +200,21 @@ async def build_turn_context(
     topic_match = classify_topic(latest_text)
     objection = detect_objection(latest_text)
 
+    prior_user_texts = [m.content for m in llm_messages[:-1] if m.role == "user"]
+    prior_bot_texts = [m.content for m in llm_messages if m.role == "assistant"]
+    deflect_count, last_mode = await _deflection_history(session, lead)
+    repeat = _looks_like_repeat(latest_text, prior_user_texts)
+    frustrated = bool(_FRUSTRATED.search(latest_text))
+    deflection = select_deflection(
+        topic_match=topic_match,
+        objection=objection,
+        speaker=speaker,
+        deflect_index=deflect_count,
+        repeat_detected=repeat,
+        last_mode=last_mode,
+        frustrated=frustrated,
+    )
+
     turn_block = (
         "\n\n## Current turn context\n"
         f"speaker: {speaker.value} (via {speaker_method})\n"
@@ -147,6 +226,7 @@ async def build_turn_context(
         f"{_pace_block(pace_plan)}"
         f"{_topic_block(topic_match)}"
         f"{_objection_block(objection)}"
+        f"{_deflection_block(deflection, settings)}"
         "\n## Knowledge snippets (rely on these; do not add facts beyond them)\n"
         f"{kb_block}\n"
     )
@@ -155,6 +235,8 @@ async def build_turn_context(
     recent_text = "\n".join(m.content for m in llm_messages[-6:])
     guard_context = GuardContext(
         conversation_text=recent_text,
+        lead_message=latest_text,
+        prior_bot_text="\n".join(prior_bot_texts[-4:]),
         financing_cleared=lead.financing_cleared,
         country_bounds=settings.country_cost_bounds,
         country_display=settings.country_cost_range_display,
@@ -177,6 +259,7 @@ async def build_turn_context(
         pace_plan=pace_plan,
         topic_match=topic_match,
         objection=objection,
+        deflection=deflection,
     )
 
 
@@ -242,4 +325,14 @@ def _objection_block(o: Objection | None) -> str:
         "\n## Objection detected (sales-playbook Part 5)\n"
         f"type: {o.id}\n"
         f"handle_like_this: {o.script_hint}\n"
+    )
+
+
+def _deflection_block(plan: DeflectionPlan | None, settings: Settings) -> str:
+    if plan is None:
+        return ""
+    return turn_hint(
+        plan,
+        counselor_phone=settings.counselor_phone.strip(),
+        office_address=settings.office_address.strip(),
     )

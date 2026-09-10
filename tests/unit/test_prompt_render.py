@@ -80,3 +80,12 @@ def test_defaults_now_carry_confirmed_values():
 def test_india_compare_clause_qualitative_when_unset():
     text = render_system_prompt(Settings(india_compare_cost_range=None))
     assert "several times more" in text.lower()
+
+
+def test_deflection_modes_section_is_rendered():
+    text = render_system_prompt(Settings())
+    # all 13 modes present, plus the two hard rules
+    for n in range(1, 14):
+        assert f"\n{n}. " in text
+    assert "never the number and the address in the same message" in text.lower()
+    assert "mode 12 is permanent" in text.lower()
