@@ -11,6 +11,12 @@ x-app-env: &app-env
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  # OpenRouter: routes lead conversation data through OpenRouter + the upstream
+  # host. See docs/llm-data-handling.md; confirm the policy before real leads.
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  OPENROUTER_MODEL: ${OPENROUTER_MODEL:-google/gemini-3.7-flash}
+  OPENROUTER_CLASSIFIER_MODEL: ${OPENROUTER_CLASSIFIER_MODEL:-google/gemini-3.7-flash}
+  OPENROUTER_DATA_POLICY_CONFIRMED: ${OPENROUTER_DATA_POLICY_CONFIRMED:-false}
   OUTREACH_REQUIRE_VERIFIED_CONSENT: ${OUTREACH_REQUIRE_VERIFIED_CONSENT:-true}
   MINOR_DEFAULT_POLICY: ${MINOR_DEFAULT_POLICY:-pending_review}
   SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}

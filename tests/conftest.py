@@ -20,7 +20,7 @@ os.environ["LLM_PROVIDER"] = "fake"
 os.environ["WHATSAPP_CLIENT"] = "fake"
 os.environ["WEBHOOK_CONVERSATION_DISPATCH"] = "inline"
 os.environ["CONSENT_ASK_SWEEP_ENABLED"] = "false"
-for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
+for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"):
     os.environ[_k] = ""
 
 import fakeredis.aioredis  # noqa: E402

@@ -29,9 +29,11 @@ Edit `.env`:
 | `WEBHOOK_CONVERSATION_DISPATCH` | `inline` | replies in-request, no Celery |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./leadbot.db` | no Postgres server |
 | `REDIS_URL` | `redis://localhost:6379/0` | the portable Redis |
-| `LLM_PROVIDER` | `fake` or `gemini` | `fake` = canned replies, offline; `gemini` = real |
+| `LLM_PROVIDER` | `fake`, `gemini`, or `openrouter` | `fake` = canned replies, offline; others = real |
 | `GEMINI_API_KEY` | *(your key)* | only if `LLM_PROVIDER=gemini` |
 | `GEMINI_MODEL` | `gemini-3.5-flash` | free-tier keys 503 on the flagship models |
+| `OPENROUTER_API_KEY` | *(your key)* | only if `LLM_PROVIDER=openrouter` (route `google/gemini-3.7-flash`) |
+| `OPENROUTER_DATA_POLICY_CONFIRMED` | `false` | set `true` only after reading `docs/llm-data-handling.md` — this provider adds OpenRouter as a data processor |
 
 The portable Redis is fetched automatically the first time you run the script
 (needs internet once). If you're offline, drop any `redis-server` /

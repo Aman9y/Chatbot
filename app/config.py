@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     whatsapp_rate_card: str = "{}"
 
     # --- conversation engine (Phase 3) -----------------------------------
-    llm_provider: Literal["fake", "anthropic", "openai", "gemini"] = "fake"
+    llm_provider: Literal["fake", "anthropic", "openai", "gemini", "openrouter"] = "fake"
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
     anthropic_effort: str = "low"
@@ -108,6 +108,25 @@ class Settings(BaseSettings):
     # .env for reproducibility.
     gemini_model: str = "gemini-flash-latest"
     gemini_classifier_model: str = "gemini-flash-lite-latest"
+    # --- OpenRouter (OpenAI-compatible gateway) -------------------------
+    # Key from the OPENROUTER_API_KEY env var only — required when
+    # LLM_PROVIDER=openrouter. IMPORTANT: with this provider, lead conversation
+    # content is sent to OpenRouter's infrastructure, which then forwards it to
+    # the upstream model host (Google, for the gemini route). That is TWO
+    # third-party processors in the data path, not one. See
+    # docs/llm-data-handling.md — OpenRouter's stated retention/logging policy
+    # for API traffic must be confirmed before this points at real leads, and
+    # OPENROUTER_DATA_POLICY_CONFIRMED must be set true to acknowledge it.
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "google/gemini-3.7-flash"
+    openrouter_classifier_model: str = "google/gemini-3.7-flash"
+    # Optional attribution headers OpenRouter shows on its dashboard.
+    openrouter_app_url: str = ""
+    openrouter_app_title: str = ""
+    # Operator must flip this true once OpenRouter's data-handling policy has
+    # been read and accepted for lead PII. Until then check-config flags it.
+    openrouter_data_policy_confirmed: bool = False
     llm_temperature: float = 0.4
     llm_max_output_tokens: int = 1600
     llm_timeout_seconds: float = 40.0
@@ -356,11 +375,20 @@ class Settings(BaseSettings):
             "anthropic": ("ANTHROPIC_API_KEY", self.anthropic_api_key),
             "openai": ("OPENAI_API_KEY", self.openai_api_key),
             "gemini": ("GEMINI_API_KEY", self.gemini_api_key),
+            "openrouter": ("OPENROUTER_API_KEY", self.openrouter_api_key),
         }.get(self.llm_provider)
         if _provider_key and not _provider_key[1]:
             items.append(
                 f"LLM_PROVIDER={self.llm_provider} but {_provider_key[0]} is not set "
                 "- conversation engine will error"
+            )
+        if self.llm_provider == "openrouter" and not self.openrouter_data_policy_confirmed:
+            items.append(
+                "LLM_PROVIDER=openrouter routes lead conversation data through "
+                "OpenRouter's infrastructure (then Google's) - a new third-party "
+                "processor. Read OpenRouter's data retention/logging policy for API "
+                "traffic, then set OPENROUTER_DATA_POLICY_CONFIRMED=true. See "
+                "docs/llm-data-handling.md."
             )
         return items
 

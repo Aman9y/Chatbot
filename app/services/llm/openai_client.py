@@ -55,7 +55,7 @@ class OpenAILLMClient(LLMClient):
         try:
             resp = await self._client.chat.completions.create(**kwargs)
         except OpenAIError as exc:  # pragma: no cover - network
-            raise LLMError(f"openai call failed: {exc}") from exc
+            raise LLMError(f"{self.provider} call failed: {exc}") from exc
         latency_ms = (time.perf_counter() - start) * 1000
 
         choice = resp.choices[0]

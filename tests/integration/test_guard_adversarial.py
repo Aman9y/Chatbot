@@ -104,6 +104,66 @@ async def test_guard_blocks_violating_reply(
     assert trace.guard_violations
 
 
+async def test_guard_still_fires_on_the_openrouter_provider_path(
+    session, redis_client, wa_client, knowledge_base, monkeypatch
+):
+    """A new provider path can behave differently even with the 'same' model.
+    Run the engine through the real OpenRouterLLMClient (vendor SDK stubbed) and
+    confirm a forbidden reply is still caught -> fallback, on that path."""
+
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    import openai
+
+    from app.services.llm.factory import build_llm_client, reply_model
+
+    bad = "Germany is roughly 45 lakh, and your admission is basically a formality."
+    created = AsyncMock(
+        return_value=SimpleNamespace(
+            id="gen-1",
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=bad), finish_reason="stop"
+                )
+            ],
+            usage=SimpleNamespace(prompt_tokens=30, completion_tokens=12),
+        )
+    )
+    monkeypatch.setattr(
+        openai,
+        "AsyncOpenAI",
+        lambda **kw: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=created)),
+            close=AsyncMock(),
+        ),
+    )
+
+    s = _settings(
+        llm_provider="openrouter",
+        openrouter_api_key="sk-or-test",
+        openrouter_data_policy_confirmed=True,
+    )
+    assert reply_model(s) == "google/gemini-3.7-flash"
+    llm = build_llm_client(s)
+    assert llm.provider == "openrouter"
+
+    lead, msg = await _lead(session, redis_client, s, "what does Germany cost?")
+    engine = ConversationEngine(
+        session, redis_client, s, llm=llm, kb=knowledge_base, wa_client=wa_client
+    )
+    result = await engine.handle_inbound(lead, msg)
+
+    assert result.action == "fallback_sent"
+    sent = wa_client.sent[-1]["text"]
+    assert "45 lakh" not in sent and "formality" not in sent.lower()
+    trace = await session.scalar(
+        select(ConversationTrace).where(ConversationTrace.lead_id == lead.id)
+    )
+    assert trace.guard_verdict == "blocked_fallback"
+    assert trace.llm_model == "google/gemini-3.7-flash"
+
+
 async def test_below_cutoff_student_still_gets_helpful_reply(
     session, redis_client, wa_client, knowledge_base
 ):

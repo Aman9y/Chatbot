@@ -150,6 +150,94 @@ def test_gemini_requires_key_from_env():
         GeminiLLMClient(Settings(llm_provider="gemini", gemini_api_key=""))
 
 
+@pytest.fixture
+def openrouter_stub(monkeypatch):
+    """Capture both the AsyncOpenAI constructor kwargs and the create() call."""
+    import openai
+
+    created = AsyncMock(
+        return_value=SimpleNamespace(
+            id="gen-abc",
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="Hi from OpenRouter!"),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(prompt_tokens=20, completion_tokens=6),
+        )
+    )
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=created)),
+        close=AsyncMock(),
+    )
+    ctor_kwargs: dict = {}
+
+    def _factory(**kw):
+        ctor_kwargs.update(kw)
+        return client
+
+    monkeypatch.setattr(openai, "AsyncOpenAI", _factory)
+    return SimpleNamespace(create=created, ctor_kwargs=ctor_kwargs)
+
+
+async def test_openrouter_adapter(openrouter_stub):
+    from app.services.llm.openrouter_client import OpenRouterLLMClient
+
+    client = OpenRouterLLMClient(
+        Settings(
+            llm_provider="openrouter",
+            openrouter_api_key="sk-or-test",
+            openrouter_app_title="leadbot",
+            llm_temperature=0.4,
+        )
+    )
+    resp = await client.complete(
+        system="you are a bot",
+        messages=MSGS,
+        model="google/gemini-3.7-flash",
+        max_output_tokens=500,
+        temperature=0.4,
+    )
+    assert resp.text == "Hi from OpenRouter!"
+    assert (resp.input_tokens, resp.output_tokens) == (20, 6)
+    assert resp.provider == "openrouter"
+
+    # constructed against the OpenRouter base URL with the OPENROUTER key
+    assert openrouter_stub.ctor_kwargs["base_url"] == "https://openrouter.ai/api/v1"
+    assert openrouter_stub.ctor_kwargs["api_key"] == "sk-or-test"
+    assert openrouter_stub.ctor_kwargs["default_headers"] == {"X-Title": "leadbot"}
+
+    # the model string passes through verbatim (provider-prefixed route)
+    kwargs = openrouter_stub.create.call_args.kwargs
+    assert kwargs["model"] == "google/gemini-3.7-flash"
+    assert kwargs["messages"][0] == {"role": "system", "content": "you are a bot"}
+    assert kwargs["temperature"] == 0.4
+
+
+def test_openrouter_requires_key_from_env():
+    from app.services.llm.openrouter_client import OpenRouterLLMClient
+
+    with pytest.raises(LLMError, match="OPENROUTER_API_KEY"):
+        OpenRouterLLMClient(Settings(llm_provider="openrouter", openrouter_api_key=""))
+
+
+def test_openrouter_data_policy_flagged_until_confirmed():
+    unconfirmed = Settings(
+        llm_provider="openrouter",
+        openrouter_api_key="sk-or-test",
+        openrouter_data_policy_confirmed=False,
+    )
+    assert any("OpenRouter" in i for i in unconfirmed.unresolved_phase1_items)
+
+    confirmed = Settings(
+        llm_provider="openrouter",
+        openrouter_api_key="sk-or-test",
+        openrouter_data_policy_confirmed=True,
+    )
+    assert not any("OpenRouter" in i for i in confirmed.unresolved_phase1_items)
+
+
 async def test_openai_adapter(openai_stub):
     from app.services.llm.openai_client import OpenAILLMClient
 
@@ -197,3 +285,10 @@ def test_factory_selects_provider(gemini_stub):
     assert classifier_model(s) == "gemini-x-lite"
     # the shipped default is the auto-tracking alias
     assert Settings.model_fields["gemini_model"].default == "gemini-flash-latest"
+
+    # openrouter
+    ors = Settings(llm_provider="openrouter", openrouter_api_key="k")
+    assert build_llm_client(ors).provider == "openrouter"
+    assert reply_model(ors) == "google/gemini-3.7-flash"
+    assert classifier_model(ors) == "google/gemini-3.7-flash"
+    assert Settings.model_fields["openrouter_model"].default == "google/gemini-3.7-flash"

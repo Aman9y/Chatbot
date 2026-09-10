@@ -31,6 +31,16 @@ These block a real launch and are not code:
 - **Premium-country (Germany/UK/US) package data.** Guard blocks all figures for
   those until provided.
 - **Paid LLM key.** Free-tier Gemini 503s under load. Same `GEMINI_API_KEY` var.
+- **OpenRouter data handling (`LLM_PROVIDER=openrouter`).** This provider sends
+  every lead message + the profile-bearing system prompt + recent history
+  through OpenRouter's servers to the upstream host (Google for
+  `google/gemini-3.7-flash`) — a **new sub-processor** on top of Google. Read
+  `docs/llm-data-handling.md`, confirm OpenRouter's retention/logging policy for
+  API traffic (default is: content not logged unless you opt in; metadata
+  always kept; upstream provider policy still applies), set the account to
+  disallow training providers, name OpenRouter in the DPDP / records-of-
+  processing work below, then set `OPENROUTER_DATA_POLICY_CONFIRMED=true`.
+  `leadbot check-config` fails until then.
 - **WABA messaging tier.** A new WABA starts at 250–1,000 business-initiated
   conversations / 24h and only ramps as quality stays green. Plan the opt-in
   drip (`CONSENT_ASKS_PER_SWEEP`) around that, not a blast.

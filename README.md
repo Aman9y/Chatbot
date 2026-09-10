@@ -42,7 +42,7 @@ Planning docs: [docs/build-plan.md](docs/build-plan.md),
 | **Importer** | `leadbot import-leads` — E.164 normalization, invalid rows collected not fatal, merge-on-reimport (idempotent), DOB/age → minor policy, `parent_phone`/`family_id` → households |
 | **Conversation engine** | `app/services/conversation/engine.py` — gates (autoreply on, bot-owned, window open, reply guard), speaker detection, **qualifier extraction** (`extraction.py`, playbook Part 6) → non-destructive lead update + eligibility recompute, KB retrieval, LLM draft, guard loop, auto-send, booking → HANDOFF, **lead scoring** (`scoring.py`, plan §3) → `interest_temperature` + `lead_score`, HIGH → one-time counsellor CTA. Extraction/scoring are best-effort and never lose a reply; engine failure never fails ingestion. |
 | **Behaviour layer** | `pacing.py` — chat-speed archetype (constant/moderate/slow from reply latency) + conversation-depth tone stage (curious-host → helpful-expert → bridge-builder → honest-handoff) + CTA mode (none/soft/direct), with the 24h/48h hour override forcing handoff/nurture. `triage.py` — the two topic matrices as one table: keyword classification → FULL/PARTIAL/SOFT/HARD-DEFLECT handling + a "how much" line, HARD-DEFLECT combos surfaced even as secondary intent, high-intent flag; plus the Part-5 objection/stall scripts. All of it is injected into the system prompt each turn (`context.py`); the guard still backstops every non-negotiable. Recorded per turn in `conversation_traces.turn_signals`. |
-| **LLM client** | `LLMClient` ABC + `AnthropicLLMClient` + `OpenAILLMClient` + `GeminiLLMClient` + `FakeLLMClient` (default). Pick via `LLM_PROVIDER`; each reads its own key from the env (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`). Cheap classifier calls use a separate model. |
+| **LLM client** | `LLMClient` ABC + `AnthropicLLMClient` + `OpenAILLMClient` + `GeminiLLMClient` + `OpenRouterLLMClient` + `FakeLLMClient` (default). Pick via `LLM_PROVIDER`; each reads its own key from the env (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY`). `openrouter` is OpenAI-wire-compatible and routes `google/gemini-3.7-flash` — see `docs/llm-data-handling.md`. Cheap classifier calls use a separate model. |
 | **Response Guard** | `app/services/guard/` — deterministic Tier-1 detectors (money figures incl. word-forms, premium-country scope, approved stateable + India-comparison ranges, financing, payment/refund terms, guarantees, PG cost, meta-leak, length). `check()` is pure; the engine does block → regenerate (×`GUARD_REGENERATE_ATTEMPTS`) → `safe_fallback_message` + counsellor alert. |
 | **Knowledge base** | `app/knowledge/kb.yaml` (hand-written, pre-redacted seed) + keyword retrieval. A redaction lint re-runs the guard detectors on load and refuses any chunk with a blocked figure (critique B3). pgvector is Phase 8. |
 | **Decision trace** | `conversation_traces` — per inbound turn: speaker, phase, KB chunks, every draft + guard verdict, tokens, final action, booking, errors (critique C2). |
@@ -240,8 +240,8 @@ the **Response Guard** block a bad reply, run the adversarial tests
 
 ```bash
 # .env  (put real keys in .env only — never in .env.example or the repo)
-LLM_PROVIDER=anthropic          # or: openai | gemini
-ANTHROPIC_API_KEY=sk-ant-...    # or: OPENAI_API_KEY=sk-...  /  GEMINI_API_KEY=...
+LLM_PROVIDER=anthropic          # or: openai | gemini | openrouter
+ANTHROPIC_API_KEY=sk-ant-...    # or: OPENAI_API_KEY=sk-... / GEMINI_API_KEY=... / OPENROUTER_API_KEY=sk-or-...
 COMPANY_NAME=YourCo
 COUNSELOR_NAME=Dr. Rao
 ```
@@ -251,6 +251,12 @@ A free-tier AI Studio key is fine for testing with synthetic leads; swap to a
 paid key through the same variable for production — no code change. Models default
 to `gemini-2.5-flash` / `gemini-2.5-flash-lite` (`GEMINI_MODEL` /
 `GEMINI_CLASSIFIER_MODEL` to override).
+
+`openrouter` reaches `google/gemini-3.7-flash` via OpenRouter's OpenAI-compatible
+API (`OPENROUTER_API_KEY` from the env only). **Data-handling note:** this
+provider routes lead conversation content through OpenRouter *and* the upstream
+host — a second external processor. `leadbot check-config` marks it unresolved
+until `OPENROUTER_DATA_POLICY_CONFIRMED=true`. See `docs/llm-data-handling.md`.
 
 The guard runs identically for every provider. Blocked-then-unfixable replies
 send a canned fallback and queue a `handoff_notifications` row (delivered to
@@ -367,7 +373,7 @@ app/
     handoff.py            counsellor notifications (log / webhook)
     nudges.py             canned in-window nudge copy
     whatsapp/             WhatsAppClient ABC + meta + fake + factory
-    llm/                  LLMClient ABC + anthropic + openai + gemini + fake + factory
+    llm/                  LLMClient ABC + anthropic + openai + gemini + openrouter + fake + factory
     knowledge/            KnowledgeBase ABC + YAML KB + redaction lint
     guard/                Response Guard — detectors, guard, safe fallback
     conversation/         prompt render, speaker, context, booking, engine

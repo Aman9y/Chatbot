@@ -74,6 +74,14 @@ def check_config() -> None:
     typer.echo(f"llm_provider          : {settings.llm_provider}")
     typer.echo(f"reply_model           : {reply_model(settings)}")
     typer.echo(f"classifier_model      : {classifier_model(settings)}")
+    if settings.llm_provider == "openrouter":
+        typer.echo(
+            "  data path           : lead conversation -> OpenRouter -> upstream host "
+            "(Google for the gemini route)"
+        )
+        typer.echo(
+            f"  data policy confirmed : {settings.openrouter_data_policy_confirmed}"
+        )
     typer.echo(f"bot_autoreply_enabled : {settings.bot_autoreply_enabled}")
     typer.echo(f"guard_enabled         : {settings.guard_enabled}")
     typer.echo(f"guard_regenerate_attempts : {settings.guard_regenerate_attempts}")

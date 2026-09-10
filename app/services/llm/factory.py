@@ -18,6 +18,10 @@ def build_llm_client(settings: Settings) -> LLMClient:
         from app.services.llm.gemini_client import GeminiLLMClient
 
         return GeminiLLMClient(settings)
+    if settings.llm_provider == "openrouter":
+        from app.services.llm.openrouter_client import OpenRouterLLMClient
+
+        return OpenRouterLLMClient(settings)
     return FakeLLMClient()
 
 
@@ -26,6 +30,8 @@ def classifier_model(settings: Settings) -> str:
         return settings.openai_classifier_model
     if settings.llm_provider == "gemini":
         return settings.gemini_classifier_model
+    if settings.llm_provider == "openrouter":
+        return settings.openrouter_classifier_model
     return settings.anthropic_classifier_model
 
 
@@ -34,4 +40,6 @@ def reply_model(settings: Settings) -> str:
         return settings.openai_model
     if settings.llm_provider == "gemini":
         return settings.gemini_model
+    if settings.llm_provider == "openrouter":
+        return settings.openrouter_model
     return settings.anthropic_model
