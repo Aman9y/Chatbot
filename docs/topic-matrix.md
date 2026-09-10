@@ -1,5 +1,38 @@
 # MBBS Bot — Topic Handling Matrix
 
+> **Corrections applied 2026-09-09 (Hamza) — confirmed Stellar Educonsultancy
+> data (round 2 of 4):**
+> - Company is **Stellar Educonsultancy** (Mira Road East, Thane). Director is
+>   **Rafique Shaikh**, referred to as **Rafique Sir**, direct number
+>   `+91 74478 67887`. Replace every "our counsellor" / "our team" placeholder.
+>   Any earlier "Keyur Sir" reference is dead — do not use it.
+> - Company framing: "over ten years of operating experience **and** formally
+>   registered in 2024" — always state both together, never one alone. Do **not**
+>   name a parent company yet.
+> - Cost figures the bot MAY state now come from a **per-country** config
+>   (`COUNTRY_COST_RANGES`), replacing the single "Kazakhstan/Uzbekistan tier"
+>   rule entirely. Each range is bound to its own country — never quote one
+>   country's range for another:
+>   Uzbekistan ₹30–35L · Kyrgyzstan ₹30–35L · Kazakhstan ₹30–35L ·
+>   Russia ₹27–45L · Bangladesh ₹32–45L · **Georgia ₹38–55L** · **Nepal ₹57–80L**.
+>   India-private comparison stays "₹80L–1.2Cr". Germany/UK/US and any
+>   unconfigured country: still unstated.
+> - **Georgia and Nepal** figures may be given **only** with the reason the band
+>   is higher **and** Rafique Sir's number offered in the same reply. If the
+>   number lands badly, pivot to the call — don't pile on justification. If the
+>   lead is budget-constrained, surface the ₹27–35L countries.
+>   - Nepal reason: right next to India (short, cheap travel; easy family
+>     contact), academic structure almost identical to India's, many Indian
+>     doctors on the faculty.
+>   - Georgia reason: a genuinely different education market with its own cost
+>     structure — not comparable to the CIS/Central-Asia tier.
+> - **Every** cost reply pairs the figure with at least one concrete inclusion
+>   (visa processing, passport help, travel/airline arrangements, accommodation
+>   setup, end-to-end on-ground support) and varies which inclusions it names
+>   turn to turn. Never a bare number.
+> - "**Government medical institutes only**" is a real differentiator — it is the
+>   answer to "how do I know this university is legitimate" (KB `government-institutes`).
+
 > **Corrections applied 2026-09-08 (Hamza) — this file + topic-matrix-2 are one
 > combined reference, not two systems:**
 > - Living-cost figures (§20) and part-time-work limits (§25) were unconfirmed
@@ -10,10 +43,8 @@
 > - FMGE facts in §14 are confirmed: 3 attempts/year (was 2), 50% pass mark on
 >   300, one-year paid internship after, and it "depends heavily on which
 >   university you did MBBS from."
-> - Cost figures the bot MAY state (see build-plan §2 + config): the
->   Kazakhstan/Uzbekistan tier "₹30–35 lakh", and the India-private comparison
->   "₹80L–1.2Cr". Everything else premium/unstated. Kyrgyzstan is treated as
->   unstated for now.
+> - Cost figures the bot MAY state: superseded by the 2026-09-09 per-country
+>   ranges above.
 > - Close mechanics: call-or-office-visit only, never a clock time (see
 >   sales-playbook Part 4 corrections).
 
@@ -35,8 +66,8 @@ give the *real* reason it needs a call) → offer the call/office. Never say
 - **Tone**: Warm, curious, "let me help you check."
 
 ### 2. Fees & Budget — ~10–15 types
-- **Handling**: PARTIAL for Kazakhstan/Uzbekistan tier (₹30–35L stated). HARD DEFLECT on Germany/UK/US exact figures, on our consultancy fees, and on anything financing-related.
-- **How much**: One tier-level number + "real number depends on your specific case."
+- **Handling**: PARTIAL for any country with an approved range (see header list) — one country's range per reply, always paired with a concrete inclusion. Georgia/Nepal only with the higher-band reason + Rafique Sir's number. HARD DEFLECT on Germany/UK/US exact figures, on our consultancy fees, and on anything financing-related.
+- **How much**: The one country's approved range + one inclusion (rotate which) + "real number depends on your specific case." Never a bare figure.
 - **Tone / deflect**: "I don't want to throw a number at you without context — country and package change it a lot. That's the call."
 
 ### 3. Country Selection — ~8–12 types

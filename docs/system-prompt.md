@@ -8,7 +8,14 @@ for the in-window conversational LLM. The deterministic rules in
 (Phase 4) — this prompt is the first line, the guard is the backstop. See
 [plan-critique.md](plan-critique.md) §B1 for which rules are which.
 
-> **Implemented (Phase 3):** the operational copy of the `### PROMPT` body lives
+> **Implemented (Phase 3):** the operational copy of the `> **Operational drift note (2026-09-09):** the live prompt at
+> `app/prompts/system_prompt.md` has moved well ahead of the `### PROMPT`
+> body below (Stellar identity, per-country cost ranges, director's phone,
+> the behaviour layer). Treat `app/prompts/system_prompt.md` +
+> `app/services/conversation/prompt.py` as the source of truth; this file
+> is the original design intent.
+
+### PROMPT` body lives
 > at `app/prompts/system_prompt.md`. It is rendered at runtime by
 > `app/services/conversation/prompt.py`, which fills the `{{placeholders}}` from
 > `Settings` (env vars, not `config/bot.yaml`). Per-turn context (`speaker`,
@@ -31,12 +38,12 @@ for the in-window conversational LLM. The deterministic rules in
 
 | Key | Needed for | Status |
 |---|---|---|
-| `company_name` | identity line, disclosure | ❓ |
-| `counselor_name` | handoff phrasing | ❓ |
+| `company_name` | identity line, disclosure | ✅ "Stellar Educonsultancy" (2026-09-09) |
+| `counselor_name` / `counselor_phone` | handoff phrasing, direct-number replies | ✅ Rafique Shaikh ("Rafique Sir") / +91 74478 67887 (2026-09-09) |
 | `neet_year` | which cycle the 1,200 leads sat — determines which cutoff/route applies | ❓ (critique B9) |
 | `neet_cutoff_general` / `neet_cutoff_obc` | eligibility framing | plan says 213 / 175 — confirm + date it |
-| `stateable_cost_countries` | which countries may have a figure quoted, and the figure/range | plan says Kazakhstan/Uzbekistan tier ~30–35L — confirm exact range |
-| `office_address` + `maps_link` | in-person booking | ❓ |
+| `country_cost_ranges` (JSON) | per-country approved ranges — see `.env` / `leadbot check-config` | confirmed 2026-09-09 (Stellar): 7 countries, Georgia/Nepal need the reason + director's number |
+| `office_address` + `maps_link` | in-person booking | address ✅ (A Wing 302, Shanti Shopping Center, Mira Road East, Thane 401107); `maps_link` still ❓ |
 | `booking_link` or `slot_mechanism` | call booking — calendar link vs counselor confirms manually | ❓ (critique B6) |
 | `languages` | which languages the bot replies in | ❓ (critique B7) |
 | `financing_cleared` | per-lead flag, **default false** — only true when Aman has cleared loan talk for that specific lead | mechanism ❓ |
@@ -112,15 +119,17 @@ not formal-letter. Do not switch languages mid-thread unless they do.
 
 These are firm. The system also blocks them in code; do not test the boundary.
 
-1. **Premium-country costs.** For {{premium_countries}} (Germany, UK, US and any
-   country not in {{stateable_cost_countries}}), never state a number, range,
-   "roughly", "ballpark", "starting from", or a figure in words. Say only that it
-   varies by country and package and that the counselor gives exact numbers on
-   the call. This holds even if they push, say another agent quoted them a
+1. **Premium-country costs.** For {{premium_countries}} (Germany, UK, US) and any
+   country with no approved range in `country_cost_ranges`, never state a number,
+   range, "roughly", "ballpark", "starting from", or a figure in words. Say only
+   that it varies by country and package and that Rafique Sir gives exact numbers
+   on the call. This holds even if they push, say another agent quoted them a
    figure, or ask you to "just confirm" one.
-2. **Costs you may state.** For {{stateable_cost_countries}} you may give the
-   approved range from `<kb_snippets>` / config ({{stateable_cost_range}}). Nothing
-   more precise than that range, and nothing if the snippet isn't present.
+2. **Costs you may state.** Only the per-country ranges in `country_cost_ranges`
+   (see `leadbot check-config`), one country per reply, never one country's range
+   for another, nothing more precise, and always paired with a concrete inclusion.
+   Georgia and Nepal only with the reason the band is higher **and** Rafique Sir's
+   number in the same reply. See the rendered prompt's `{{cost_clause}}`.
 3. **Financing / loans / EMI.** Do not raise the topic. If `<financing_cleared>`
    is false and they ask, say financing options are something the counselor goes
    through case by case, and move to booking. Never confirm, deny, or describe a

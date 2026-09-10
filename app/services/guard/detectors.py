@@ -109,7 +109,7 @@ def premium_country_mentioned(text: str, premium_countries: list[str]) -> str | 
 
 # Countries this product actually discusses. Used to answer "is a country in
 # scope that we are not allowed to attach a figure to?" — i.e. anything named
-# here that is neither in STATEABLE_COST_COUNTRIES (approved to quote) nor in
+# here that is neither in COUNTRY_COST_RANGES (approved to quote) nor in
 # PREMIUM_COST_COUNTRIES (never quote — handled separately, louder). Kept
 # data-driven so it stays correct when the config lists change.
 _KNOWN_COUNTRIES: tuple[str, ...] = (
@@ -276,3 +276,53 @@ def find_meta_leak(text: str) -> list[str]:
 
 def is_approx_cost_language(text: str) -> bool:
     return bool(_APPROX.search(text) and _COST_CONTEXT.search(text))
+
+
+# --- cost-reply inclusions (round-2: never a bare figure) --------------
+
+_COST_INCLUSION = re.compile(
+    r"\b(visa|visas|passport|travel|flight|flights|airline|airfare|air ?ticket|"
+    r"tickets?|accommodation|hostel|lodging|stay(?:ing)?|"
+    r"food|mess|documentation|paperwork|"
+    r"government institutes?|government[- ]led|"
+    r"end[- ]to[- ]end|throughout (?:the |your )?(?:journey|stay|course)|"
+    r"ongoing support|support (?:throughout|on the ground|there)|"
+    r"we (?:handle|arrange|set up|assist with|help with|take care of)|"
+    r"forwarding|pre[- ]?departure|post[- ]?arrival|settling in)\b",
+    re.IGNORECASE,
+)
+
+
+def find_cost_inclusions(text: str) -> list[str]:
+    """Concrete things a cost covers, so a figure is never stated bare."""
+
+    return [m.group(0) for m in _COST_INCLUSION.finditer(text or "")]
+
+
+# --- contact number presence (Georgia/Nepal cost replies) -------------
+
+def reply_offers_number(text: str, phone: str) -> bool:
+    """True when `phone` (digits, spacing-tolerant) appears in the reply, or a
+    generic 'call <name> on ...' with any 10+-digit run. If no number is
+    configured there is nothing to require, so returns True."""
+
+    if not phone or not phone.strip():
+        return True
+    want = re.sub(r"\D", "", phone)
+    have = re.sub(r"\D", "", text or "")
+    if want and (want in have or want[-10:] in have):
+        return True
+    return bool(re.search(r"\b\+?\d[\d ()\-]{8,}\d\b", text or ""))
+
+
+# --- countries named (which per-country range applies) ----------------
+
+def countries_named(text: str, countries: list[str]) -> list[str]:
+    """Subset of `countries` whose name appears in `text` (case-insensitive,
+    word-bounded), in the order given."""
+
+    lowered = (text or "").lower()
+    return [
+        c for c in countries
+        if c.strip() and re.search(rf"\b{re.escape(c.strip().lower())}\b", lowered)
+    ]

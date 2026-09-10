@@ -6,9 +6,11 @@ safe-fallback flow lives in the conversation engine (critique B2).
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 
+from app import money
 from app.config import Settings
 from app.services.guard import detectors
 
@@ -33,10 +35,16 @@ class GuardContext:
 
     conversation_text: str = ""
     financing_cleared: bool = False
-    stateable_range: str | None = None
-    india_compare_range: str | None = None
+    # {country: (low_lakh, high_lakh)} — approved per-country ranges
+    country_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+    # {country: "₹30–35 lakh"} — display strings for violation detail
+    country_display: dict[str, str] = field(default_factory=dict)
+    india_compare_bounds: tuple[float, float] | None = None
+    india_compare_display: str | None = None
     premium_countries: list[str] = field(default_factory=list)
-    stateable_countries: list[str] = field(default_factory=list)
+    # countries whose figure needs the reason + the director's number (Georgia/Nepal)
+    sensitive_countries: list[str] = field(default_factory=list)
+    counselor_phone: str = ""
 
 
 @dataclass
@@ -111,9 +119,9 @@ class ResponseGuard:
         if not figures:
             return []
 
-        haystack = f"{ctx.conversation_text}\n{text}"
+        haystack = ctx.conversation_text + "  " + text
 
-        # 1. Premium tier in scope -> no figure at all, whatever its value.
+        # 1. Premium tier anywhere in scope -> no figure at all, whatever its value.
         premium = detectors.premium_country_mentioned(haystack, ctx.premium_countries)
         if premium:
             return [
@@ -125,38 +133,12 @@ class ResponseGuard:
                 )
             ]
 
-        # 2. Which approved ranges exist. The stateable tier range is approved
-        #    copy in its own right: a figure inside it is allowed whether or not
-        #    the sentence happens to name the country. Requiring the country name
-        #    here was a false positive — "your ₹30-35 lakh budget works" got
-        #    blocked purely for not saying "Kazakhstan", and the lead got the
-        #    canned fallback instead of an answer. The India-private range stays
-        #    context-gated: outside an India comparison that figure means nothing.
-        approved: list[tuple[str, set[str]]] = []
-        if ctx.stateable_range:
-            tier = "/".join(c for c in ctx.stateable_countries if c) or "stateable"
-            approved.append((f"{tier} tier", _digit_runs(ctx.stateable_range)))
-        if ctx.india_compare_range and detectors.india_context(haystack):
-            approved.append(
-                ("India-private comparison", _digit_runs(ctx.india_compare_range))
-            )
+        ranged = list(ctx.country_bounds)
 
-        if not approved:
-            return [
-                Violation(
-                    "unapproved_cost_figure",
-                    ", ".join(figures),
-                    "cost figure but no approved cost range is configured "
-                    "(plan §2 — nothing may be quoted until one is)",
-                )
-            ]
-
-        # 3. A country we may not price is in scope -> even an approved-tier
+        # 2. A known country the reply names that no approved range covers -> the
         #    figure would read as *that* country's price.
         unpriceable = detectors.unpriceable_country_mentioned(
-            haystack,
-            approved_countries=ctx.stateable_countries,
-            premium_countries=ctx.premium_countries,
+            text, approved_countries=ranged, premium_countries=ctx.premium_countries
         )
         if unpriceable:
             return [
@@ -168,20 +150,86 @@ class ResponseGuard:
                 )
             ]
 
-        # 4. The actual test: is every figure inside an approved range?
-        allowed = set().union(*(digits for _, digits in approved))
-        for fig in figures:
-            fig_digits = _digit_runs(fig)
-            if not fig_digits or not fig_digits.issubset(allowed):
+        # 3. Strict: one country per cost reply. Two named countries + figures
+        #    means the lead can't tell which range is which.
+        named = detectors.countries_named(text, ranged)
+        if len(named) >= 2:
+            return [
+                Violation(
+                    "multi_country_cost",
+                    ", ".join(named),
+                    "a cost reply may name only one country — answer one "
+                    "country's cost at a time",
+                )
+            ]
+
+        # 4. Which single bound applies.
+        if named:
+            country = named[0]
+            lo, hi = ctx.country_bounds[country]
+            label = f"{country} {ctx.country_display.get(country, '')}".strip()
+        elif ctx.india_compare_bounds and detectors.india_context(haystack):
+            country = None
+            lo, hi = ctx.india_compare_bounds
+            label = f"India-private comparison {ctx.india_compare_display or ''}".strip()
+        elif ctx.country_bounds:
+            # figure with no country and no India context: only the overall
+            # tier envelope is defensible — the lead can't misattribute it.
+            country = None
+            lo = min(b[0] for b in ctx.country_bounds.values())
+            hi = max(b[1] for b in ctx.country_bounds.values())
+            label = f"general tier envelope (₹{lo:g}–{hi:g} lakh)"
+        else:
+            return [
+                Violation(
+                    "unapproved_cost_figure",
+                    ", ".join(figures),
+                    "cost figure but no approved cost range is configured",
+                )
+            ]
+
+        # 5. Every amount inside [lo, hi]? Range spans ("30-35 lakh") yield both
+        #    endpoints; an unreadable amount comes back as nan and fails here.
+        for value in money.figures_in_lakh(text):
+            if math.isnan(value) or not (lo <= value <= hi):
                 return [
                     Violation(
                         "cost_outside_approved_range",
-                        fig,
-                        "figure not within the approved range(s): "
-                        + ", ".join(label for label, _ in approved),
+                        ", ".join(figures),
+                        f"figure not within the approved range for {label}",
                     )
                 ]
-        return []
+
+        out: list[Violation] = []
+
+        # 6. Georgia / Nepal: the number for the director must be in the reply.
+        if country in ctx.sensitive_countries and not detectors.reply_offers_number(
+            text, ctx.counselor_phone
+        ):
+            out.append(
+                Violation(
+                    "sensitive_cost_needs_contact",
+                    country,
+                    f"{country} cost stated without offering the director's "
+                    "number in the same reply (round-2 rule)",
+                )
+            )
+
+        # 7. A figure must never be bare — pair it with a concrete inclusion.
+        #    The India-comparison reply is about the value gap, not inclusions.
+        if country is not None or not (
+            ctx.india_compare_bounds and detectors.india_context(haystack)
+        ):
+            if not detectors.find_cost_inclusions(text):
+                out.append(
+                    Violation(
+                        "cost_missing_inclusion",
+                        ", ".join(figures),
+                        "cost figure stated bare — pair it with at least one "
+                        "concrete inclusion (visa, travel, accommodation, support)",
+                    )
+                )
+        return out
 
     def _check_payment_terms(self, text: str) -> list[Violation]:
         hits = detectors.find_payment_terms(text)

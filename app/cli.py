@@ -63,8 +63,10 @@ def check_config() -> None:
     typer.echo(f"neet_year             : {settings.neet_year}")
     typer.echo(f"neet_cutoff_general   : {settings.neet_cutoff_general}")
     typer.echo(f"neet_cutoff_obc       : {settings.neet_cutoff_obc}")
-    typer.echo(f"stateable_cost_range  : {settings.stateable_cost_range}")
-    typer.echo(f"stateable_countries   : {settings.stateable_cost_countries}")
+    typer.echo(f"company / director    : {settings.company_name} / {settings.counselor_name}")
+    typer.echo(f"director phone        : {settings.counselor_phone or '(none)'}")
+    typer.echo(f"country cost ranges   : {settings.country_cost_range_display}")
+    typer.echo(f"sensitive countries   : {settings.sensitive_cost_country_list}")
     typer.echo(f"india_compare_range   : {settings.india_compare_cost_range}")
     typer.echo("")
     from app.services.llm.factory import classifier_model, reply_model

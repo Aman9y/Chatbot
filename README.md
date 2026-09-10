@@ -60,15 +60,25 @@ Run `leadbot check-config` to see the live list. These are the blockers from
 |---|---|
 | Consent for legacy leads (A1) | The in-chat opt-in + age gate is now the path through `OUTREACH_REQUIRE_VERIFIED_CONSENT` (a gate-cleared lead is `consent_verified=true`). `CONSENT_ASK_SWEEP_ENABLED=false` → no opt-in asks go out until the `gate_consent` template is approved and an operator turns it on. The substantive DPDP / legacy-consent policy is still open. |
 | DPDP / minor policy (A2) | Age gate stops the bot the moment a lead says under-18 (`GATE_HOLD`, counsellor-flagged) — a **safe placeholder**. `MINOR_DEFAULT_POLICY=pending_review` still blocks outreach to any detected minor. The real parent-consent / retention process is unresolved. |
-| Company / counsellor name (§7) | `COMPANY_NAME` / `COUNSELOR_NAME` unset → the system prompt renders "our team" / "our counsellor", identity/credential questions stay generic, and the opt-in ask says "our team" |
+| Company / counsellor name (§7) | If `COMPANY_NAME` / `COUNSELOR_NAME` are unset the system prompt falls back to "our team" / "our counsellor". Confirmed 2026-09-09 (see below). |
 
 **Resolved 2026-09-08 (Hamza):** NEET year + cutoffs (`NEET_YEAR=2026`,
-`NEET_CUTOFF_GENERAL=213`, `NEET_CUTOFF_OBC=175`); stateable cost tier
-(`STATEABLE_COST_RANGE=₹30–35 lakh` for Kazakhstan + Uzbekistan only —
-Kyrgyzstan stays unstated); India-vs-abroad comparison figure
-(`INDIA_COMPARE_COST_RANGE=₹80L–1.2Cr`). Build-plan §2 **rule 7** added:
+`NEET_CUTOFF_GENERAL=213`, `NEET_CUTOFF_OBC=175`); India-vs-abroad comparison
+figure (`INDIA_COMPARE_COST_RANGE=₹80L–1.2Cr`). Build-plan §2 **rule 7** added:
 payment schedules and refund/cancellation terms are a deterministic guard block
 (`payment_terms_disclosure`).
+
+**Resolved 2026-09-09 (Hamza) — Stellar Educonsultancy client data:**
+`COMPANY_NAME=Stellar Educonsultancy`, `COUNSELOR_NAME=Rafique Shaikh`
+(referred to as "Rafique Sir"), `COUNSELOR_PHONE=+91 74478 67887`,
+`OFFICE_ADDRESS` (Mira Road East, Thane). Per-country stateable cost ranges
+replace the old single tier — `COUNTRY_COST_RANGES` JSON holds seven countries
+(Uzbekistan / Kyrgyzstan / Kazakhstan ₹30–35L, Russia ₹27–45L, Bangladesh
+₹32–45L, Georgia ₹38–55L, Nepal ₹57–80L); each range is bound to its own
+country. `SENSITIVE_COST_COUNTRIES=Georgia,Nepal` — those two may only be quoted
+with the reason the band is higher **and** Rafique Sir's number in the same
+reply. Every cost reply pairs the figure with a concrete inclusion. Still open:
+`MAPS_LINK`.
 
 ---
 

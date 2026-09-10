@@ -2,9 +2,13 @@
 
 > **Corrections applied 2026-09-08 (Hamza) — this file + topic-matrix.md are one
 > combined reference:**
-> - §6 / §7 cost figures are approved for use: India-private "₹80L–1.2Cr" vs
->   the Kazakhstan/Uzbekistan tier "₹30–35 lakh". No figure more precise, and
->   nothing for other countries.
+> - §6 / §7 cost figures: India-private "₹80L–1.2Cr" stays approved for the
+>   India-vs-abroad comparison. The single "₹30–35 lakh tier" is superseded by
+>   the per-country ranges confirmed 2026-09-09 (see topic-matrix.md header):
+>   Uzbekistan/Kyrgyzstan/Kazakhstan ₹30–35L, Russia ₹27–45L, Bangladesh ₹32–45L,
+>   Georgia ₹38–55L, Nepal ₹57–80L. Each range is bound to its own country;
+>   Georgia/Nepal need the higher-band reason + Rafique Sir's number; every cost
+>   reply pairs the figure with a concrete inclusion. Nothing for other countries.
 > - §8 "~28-day process" applies specifically to UG MBBS students applying to
 >   study abroad — state it with that scope.
 > - §9 payment/refund HARD DEFLECT is now **build-plan §2 rule 7**, enforced as
@@ -61,9 +65,9 @@ Same universal rule applies: acknowledge → give the real reason (not
 
 ### 6. India MBBS vs MBBS Abroad — ~6–8 types
 - **Handling**: FULL — this is the core value proposition.
-- **How much**: Full cost gap comparison (₹80L–1.2Cr India private vs.
-  ₹30–35L Kazakhstan/Uzbekistan tier), FMGE path explained honestly. Use
-  freely.
+- **How much**: Full cost gap comparison (₹80L–1.2Cr India private vs. the far
+  lower economical route abroad — the ₹27–35L countries), FMGE path explained
+  honestly. Use freely.
 - **Tone**: Confident, this is the pitch.
 
 ### 7. Private MBBS India vs MBBS Abroad — ~5–8 types

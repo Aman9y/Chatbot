@@ -64,13 +64,21 @@ class Settings(BaseSettings):
     neet_cutoff_general: int | None = 213
     neet_cutoff_obc: int | None = 175
 
-    # --- stateable cost tiers (confirmed 2026-09-08 by Hamza) -------------
-    # Kazakhstan + Uzbekistan only. Kyrgyzstan is NOT confirmed yet — it is
-    # deliberately absent so the guard treats any Kyrgyzstan figure as unstated.
-    stateable_cost_countries: str = "Kazakhstan,Uzbekistan"
-    stateable_cost_range: str | None = "₹30–35 lakh"
+    # --- per-country stateable cost ranges (confirmed 2026-09-09 by Hamza,
+    #     Stellar Educonsultancy). JSON: {"Country": "display range"}. Each range
+    #     is bound to its country; the guard never quotes one for another. A
+    #     country not listed here (and not premium) -> no figure may be stated.
+    country_cost_ranges: str = (
+        '{"Uzbekistan": "₹30–35 lakh", "Kyrgyzstan": "₹30–35 lakh", '
+        '"Kazakhstan": "₹30–35 lakh", "Russia": "₹27–45 lakh", '
+        '"Bangladesh": "₹32–45 lakh", "Georgia": "₹38–55 lakh", '
+        '"Nepal": "₹57–80 lakh"}'
+    )
+    # High-cost countries: figure may ONLY be given with the reason it is higher
+    # AND the director's number in the same reply (topic matrix / round-2 rule).
+    sensitive_cost_countries: str = "Georgia,Nepal"
     # India-private MBBS range, stateable only as the India-vs-abroad comparison
-    # (plan §2 / topic-matrix-2 §6). Confirmed 2026-09-08 by Hamza.
+    # (plan §2 / topic-matrix-2 §6). Kept 2026-09-09 by Hamza.
     india_compare_cost_range: str | None = "₹80L–1.2Cr"
 
     # --- opt-out keywords --------------------------------------------------
@@ -179,11 +187,17 @@ class Settings(BaseSettings):
 
     # --- system-prompt placeholders (plan §7 / docs/system-prompt.md) --
     # Unset values render as safe generic phrasing ("our team" / "our counselor").
-    company_name: str = ""
-    counselor_name: str = ""
-    office_address: str = ""
-    maps_link: str = ""
-    booking_link: str = ""
+    company_name: str = "Stellar Educonsultancy"
+    counselor_name: str = "Rafique Shaikh"
+    # The bot may give this out in Georgia/Nepal cost replies and when a lead
+    # asks to talk to someone. "" -> the bot never shares a number.
+    counselor_phone: str = "+91 74478 67887"
+    office_address: str = (
+        "A Wing 302, 2nd Floor, Shanti Shopping Center, near Mira Road Railway "
+        "Station, Mira Road East, Thane 401107"
+    )
+    maps_link: str = ""  # [MISSING] not supplied by client
+    booking_link: str = ""  # no self-serve booking
     bot_languages: str = "English, Hindi, Hinglish"
     premium_cost_countries: str = "Germany,United Kingdom,UK,United States,US,USA,Canada,Australia"
 
@@ -204,7 +218,7 @@ class Settings(BaseSettings):
             return None
         return v
 
-    @field_validator("stateable_cost_range", "india_compare_cost_range", mode="before")
+    @field_validator("india_compare_cost_range", mode="before")
     @classmethod
     def _blank_str_to_none(cls, v: object) -> object:
         if isinstance(v, str) and not v.strip():
@@ -213,8 +227,37 @@ class Settings(BaseSettings):
 
     # --- derived helpers ------------------------------------------------
     @property
-    def stateable_cost_country_list(self) -> list[str]:
-        return [c.strip() for c in self.stateable_cost_countries.split(",") if c.strip()]
+    def country_cost_range_display(self) -> dict[str, str]:
+        """{country: "₹30–35 lakh"} — the approved display strings."""
+        try:
+            raw = json.loads(self.country_cost_ranges or "{}")
+        except json.JSONDecodeError:
+            return {}
+        return {str(k).strip(): str(v).strip() for k, v in raw.items() if str(v).strip()}
+
+    @property
+    def country_cost_bounds(self) -> dict[str, tuple[float, float]]:
+        """{country: (low_lakh, high_lakh)} — parsed numeric bounds."""
+        from app.money import range_to_lakh
+
+        out: dict[str, tuple[float, float]] = {}
+        for country, disp in self.country_cost_range_display.items():
+            bounds = range_to_lakh(disp)
+            if bounds:
+                out[country] = bounds
+        return out
+
+    @property
+    def sensitive_cost_country_list(self) -> list[str]:
+        return [c.strip() for c in self.sensitive_cost_countries.split(",") if c.strip()]
+
+    @property
+    def india_compare_bounds(self) -> tuple[float, float] | None:
+        from app.money import range_to_lakh
+
+        if not self.india_compare_cost_range:
+            return None
+        return range_to_lakh(self.india_compare_cost_range)
 
     @property
     def premium_cost_country_list(self) -> list[str]:
@@ -303,13 +346,12 @@ class Settings(BaseSettings):
                 f"MINOR_DEFAULT_POLICY={self.minor_default_policy.value} "
                 "blocks outreach to detected minors (critique A2)"
             )
-        if self.stateable_cost_range is None:
-            items.append("STATEABLE_COST_RANGE (Kazakhstan/Uzbekistan tier figure) - plan s2")
-        if not self.company_name or not self.counselor_name:
+        if not self.country_cost_bounds:
             items.append(
-                "COMPANY_NAME / COUNSELOR_NAME unset - system prompt renders generic "
-                "phrasing ('our team' / 'our counselor') - plan s7"
+                "COUNTRY_COST_RANGES is empty or unparseable - the bot can quote no figures"
             )
+        if not self.maps_link:
+            items.append("MAPS_LINK [MISSING] - office-visit replies have no map link")
         _provider_key = {
             "anthropic": ("ANTHROPIC_API_KEY", self.anthropic_api_key),
             "openai": ("OPENAI_API_KEY", self.openai_api_key),

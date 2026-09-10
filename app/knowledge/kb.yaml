@@ -35,49 +35,79 @@ chunks:
 
   - id: country-georgia
     title: MBBS in Georgia
-    tags: [georgia, country, europe, university]
+    tags: [georgia, country, europe, university, cost, expensive]
     text: >
       Georgia is a popular destination — English-medium programmes, NMC-recognised
-      universities, a European setting and a straightforward admission process.
-      Intakes are usually in autumn and spring. Fees and living costs vary by
-      university and package; the counsellor shares the current figures for the
-      universities that fit your profile.
+      government medical universities, a European setting and a straightforward
+      admission process. Intakes are usually in autumn and spring. Georgia sits in
+      a higher cost band than the CIS / Central Asian countries: it is a genuinely
+      different education market with its own cost structure, so it is not
+      comparable to the economical tier and should never be judged against those
+      numbers. The counsellor shares the current figures for the universities that
+      fit your profile and explains why the band is where it is.
 
   - id: country-russia
     title: MBBS in Russia
     tags: [russia, country, university, europe]
     text: >
       Russia has long hosted Indian medical students, with many NMC-recognised
-      state universities offering English-medium MBBS. Winters are cold and some
-      universities have a preparatory year. Costs differ widely between
-      universities — the counsellor walks through the options for your budget.
+      government (state) universities offering English-medium MBBS. Winters are
+      cold and some universities have a preparatory year. Costs differ widely
+      between universities — the counsellor walks through the options for your
+      budget.
 
   - id: country-kazakhstan
     title: MBBS in Kazakhstan
     tags: [kazakhstan, country, university, central asia, budget]
     text: >
       Kazakhstan is often chosen by families looking for a more economical route,
-      with NMC-recognised universities and English-medium teaching. It borders
-      India's region culturally and has a growing number of Indian students. The
-      counsellor gives you the current fee and living-cost figures for specific
-      universities.
+      with NMC-recognised government medical universities and English-medium
+      teaching. It borders India's region culturally and has a growing number of
+      Indian students. The counsellor gives you the current fee and living-cost
+      figures for specific universities.
 
   - id: country-uzbekistan
     title: MBBS in Uzbekistan
     tags: [uzbekistan, country, university, central asia, budget]
     text: >
       Uzbekistan has become a common choice in the more economical tier, with
-      English-medium MBBS at recognised universities and a relatively simple
-      admission process. As with every country, exact costs depend on the
-      university and package, which the counsellor covers on the call.
+      English-medium MBBS at recognised government medical universities and a
+      relatively simple admission process. As with every country, exact costs
+      depend on the university and package, which the counsellor covers on the
+      call.
 
   - id: country-kyrgyzstan
     title: MBBS in Kyrgyzstan
     tags: [kyrgyzstan, country, university, central asia, budget]
     text: >
-      Kyrgyzstan offers English-medium MBBS at NMC-recognised universities and is
-      generally in the more economical tier. The counsellor confirms current fees
-      and the university shortlist for your profile.
+      Kyrgyzstan offers English-medium MBBS at NMC-recognised government medical
+      universities and is generally in the more economical tier. The counsellor
+      confirms current fees and the university shortlist for your profile.
+
+  - id: country-bangladesh
+    title: MBBS in Bangladesh
+    tags: [bangladesh, country, university, saarc, budget]
+    text: >
+      Bangladesh is a well-established route for Indian students — English-medium
+      MBBS at NMC-recognised government and government-affiliated medical colleges,
+      a curriculum close to India's, a SAARC seat quota for Indian nationals, and
+      no major language or food adjustment. Intakes and eligibility follow a fixed
+      annual cycle. The counsellor confirms the current fees, the college
+      shortlist for your NEET result and the admission timeline.
+
+  - id: country-nepal
+    title: MBBS in Nepal
+    tags: [nepal, country, university, saarc, neighbour]
+    text: >
+      Nepal sits in a higher cost band than the CIS / Central Asian route, and
+      there are concrete reasons families still choose it. It is right next to
+      India, so travel is short and inexpensive and staying in touch with family
+      is easy. The academic structure is almost identical to India's, and many of
+      the faculty are Indian doctors, so the teaching style and expectations feel
+      familiar. Universities are government-recognised and English-medium. Because
+      the cost is higher, the counsellor always talks it through directly rather
+      than leaving it as a number — and Rafique Sir is available on the phone for
+      exactly this conversation.
 
   - id: country-premium
     title: Germany, the UK, the US and other premium destinations
@@ -165,3 +195,29 @@ chunks:
       Indian student communities and hostel accommodation. Teaching in the
       countries we work with is in English. Safety varies by city and university —
       the counsellor gives you a candid view for each option.
+
+  - id: government-institutes
+    title: We place students only in government medical institutes
+    tags: [legitimate, legitimacy, government, private, recognition, trust, genuine, safe, fake]
+    text: >
+      Across every country we work with, we place students only in government or
+      government-led medical institutes — not private colleges. This is a
+      deliberate policy and one of the main reasons families work with us. A
+      government medical university is state-run and state-accountable, which is
+      the clearest answer to "how do I know this university is real and will still
+      be recognised in a few years". The counsellor confirms the exact recognition
+      status (NMC listing, WHO directory) for any specific university on your
+      shortlist.
+
+  - id: about-stellar
+    title: About Stellar Educonsultancy
+    tags: [about, who, company, stellar, experience, history, trust, years]
+    text: >
+      Stellar Educonsultancy guides NEET students and their families through the
+      MBBS-abroad process end to end. The team has over ten years of hands-on
+      experience placing students abroad, and the practice was formally registered
+      as Stellar Educonsultancy in 2024 — both are true and belong together: an
+      established team operating under a current registered name. The office is in
+      Mira Road East, Thane, and the director is Rafique Shaikh, whom leads deal
+      with directly. We do not make admission or university guarantees; the
+      counsellor assesses each profile honestly.

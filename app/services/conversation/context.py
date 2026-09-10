@@ -156,10 +156,13 @@ async def build_turn_context(
     guard_context = GuardContext(
         conversation_text=recent_text,
         financing_cleared=lead.financing_cleared,
-        stateable_range=settings.stateable_cost_range,
-        india_compare_range=settings.india_compare_cost_range,
+        country_bounds=settings.country_cost_bounds,
+        country_display=settings.country_cost_range_display,
+        india_compare_bounds=settings.india_compare_bounds,
+        india_compare_display=settings.india_compare_cost_range,
         premium_countries=settings.premium_cost_country_list,
-        stateable_countries=settings.stateable_cost_country_list,
+        sensitive_countries=settings.sensitive_cost_country_list,
+        counselor_phone=settings.counselor_phone,
     )
 
     return TurnContext(

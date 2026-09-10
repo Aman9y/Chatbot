@@ -20,9 +20,14 @@ These block a real launch and are not code:
   path through `OUTREACH_REQUIRE_VERIFIED_CONSENT`; you turn on
   `CONSENT_ASK_SWEEP_ENABLED` only after (a) the `gate_consent` template is Meta-
   approved and (b) you've decided to start contacting the ~1,200.
-- **`COMPANY_NAME` / `COUNSELOR_NAME` / `OFFICE_ADDRESS` / `MAPS_LINK`.** Until
-  set the bot says "our team" / "our counsellor" and can't answer credibility
-  questions with specifics.
+- **`COMPANY_NAME` / `COUNSELOR_NAME` / `COUNSELOR_PHONE` / `OFFICE_ADDRESS`.**
+  Set as of 2026-09-09 (Stellar Educonsultancy / Rafique Shaikh / +91 74478
+  67887 / Mira Road East, Thane). `MAPS_LINK` is still unset — office-visit
+  replies share the address without a map link until it is provided.
+- **`COUNTRY_COST_RANGES` / `SENSITIVE_COST_COUNTRIES`.** Seven approved
+  per-country ranges are configured; Georgia and Nepal are gated (reason for the
+  higher band + `COUNSELOR_PHONE` required in the same reply). Any country not in
+  the JSON gets no figure.
 - **Premium-country (Germany/UK/US) package data.** Guard blocks all figures for
   those until provided.
 - **Paid LLM key.** Free-tier Gemini 503s under load. Same `GEMINI_API_KEY` var.
