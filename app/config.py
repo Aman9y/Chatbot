@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     whatsapp_rate_card: str = "{}"
 
     # --- conversation engine (Phase 3) -----------------------------------
-    llm_provider=fake
+    llm_provider: Literal["fake", "anthropic", "openai"] = "fake"
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
     anthropic_effort: str = "low"
