@@ -21,12 +21,21 @@ def test_tone_stage_progression():
 
 
 def test_cta_mode_by_pace_and_depth():
-    # constant chat: soft at 3, direct at 6
+    # constant chat: soft at 4, direct at 6
     assert plan_pace(message_depth=2, minutes_since_last_bot=1, engagement_phase="push").cta_mode == "none"
     assert plan_pace(message_depth=4, minutes_since_last_bot=1, engagement_phase="push").cta_mode == "soft"
     assert plan_pace(message_depth=7, minutes_since_last_bot=1, engagement_phase="push").cta_mode == "direct"
     # moderate chat is slower to the direct ask
     assert plan_pace(message_depth=7, minutes_since_last_bot=40, engagement_phase="push").cta_mode == "soft"
+
+
+def test_curious_host_stage_never_carries_a_cta():
+    # depths 1-3 are curious-host; no CTA regardless of pace / chat speed
+    for depth in (1, 2, 3):
+        for mins in (1, 40, 300):
+            p = plan_pace(message_depth=depth, minutes_since_last_bot=mins, engagement_phase="push")
+            assert p.tone_stage == "curious_host"
+            assert p.cta_mode == "none", (depth, mins, p.cta_mode)
 
 
 def test_hour_override_forces_handoff_and_nurture():

@@ -89,3 +89,22 @@ def test_deflection_modes_section_is_rendered():
         assert f"\n{n}. " in text
     assert "never the number and the address in the same message" in text.lower()
     assert "mode 12 is permanent" in text.lower()
+
+
+def test_prompt_gates_cost_and_pitch_on_openers():
+    text = render_system_prompt(Settings()).lower()
+    # cost figures are answer-only, never volunteered
+    assert "answer-only" in text or "never volunteer a number" in text
+    assert "do not mention any figure" in text or "not mention any figure" in text
+    # small-talk carve-out with no pitch
+    assert "small talk" in text
+    assert "sales opportunity" in text
+    assert "no mention of a call" in text
+    # CTA guidance overrides the general reply shape
+    assert "per-turn cta guidance" in text
+    assert "override" in text
+
+
+def test_deflection_reference_scopes_itself_to_actual_deflections():
+    text = render_system_prompt(Settings()).lower()
+    assert "a greeting, small talk, or a question you can simply answer is not a deflection" in text

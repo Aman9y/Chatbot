@@ -22,10 +22,12 @@ ToneStage = Literal["curious_host", "helpful_expert", "bridge_builder", "honest_
 CtaMode = Literal["none", "soft", "direct", "honest_handoff", "nurture_soft"]
 
 # soft-CTA / direct-CTA message-depth thresholds per pace (playbook Part 2).
+# Soft never lands before depth 4 — depths 1-3 are the curious-host stage and
+# carry no CTA at all (see `plan_pace`).
 _CTA_THRESHOLDS: dict[Pace, tuple[int, int]] = {
-    "constant": (3, 6),
+    "constant": (4, 6),
     "moderate": (5, 10),
-    "slow": (3, 7),
+    "slow": (4, 7),
 }
 
 _REPLY_LENGTH: dict[Pace, str] = {
@@ -44,7 +46,9 @@ _REPLY_LENGTH: dict[Pace, str] = {
 
 _PACE_NOTE: dict[Pace, str] = {
     "constant": (
-        "Lead is hot and on their phone. Do not over-serve. Aim to close by message 5-8."
+        "Lead is replying fast and on their phone. Keep replies short and match "
+        "their length. Do not over-serve, and do not rush the booking — you have "
+        "several turns; the CTA guidance says when."
     ),
     "moderate": (
         "Thoughtful lead, attention divided (maybe consulting a parent). Standard flow, "
@@ -58,8 +62,10 @@ _PACE_NOTE: dict[Pace, str] = {
 
 _TONE_NOTE: dict[ToneStage, str] = {
     "curious_host": (
-        "Curious host: warm, brief, ask before you tell. No pitching yet. Make them "
-        "feel a human who cares about their situation."
+        "Curious host: warm, brief, ask before you tell. No pitching, and no "
+        "mention of a call, a meeting, the office, or the director yet — not even "
+        "as 'the person who can help'. Just make them feel heard and find out "
+        "what they need."
     ),
     "helpful_expert": (
         "Helpful expert: small, specific, accurate nuggets that show you know this "
@@ -77,7 +83,12 @@ _TONE_NOTE: dict[ToneStage, str] = {
 }
 
 _CTA_NOTE: dict[CtaMode, str] = {
-    "none": "No CTA yet — still building trust. End with a question that keeps them talking.",
+    "none": (
+        "NO CTA this turn. Do not mention a call, a meeting, booking, the office, "
+        "the director's number, or the director as 'who can really help'. End with "
+        "a short question that keeps them talking, or just a warm reply. This "
+        "overrides any general instinct to pitch."
+    ),
     "soft": "Soft nudge: mention the call as the natural next step, lightly, once.",
     "direct": (
         "Direct CTA: ask plainly for a yes to a call OR an office visit (their choice). "
@@ -149,6 +160,10 @@ def plan_pace(
     pace = classify_pace(minutes_since_last_bot)
     tone = _tone_stage(message_depth, engagement_phase)
     cta = _cta_mode(pace, message_depth, engagement_phase)
+    # Coherence: the curious-host stage never carries a CTA, whatever the depth
+    # thresholds say. Tone and CTA must not give the model opposite instructions.
+    if tone == "curious_host" and cta in ("soft", "direct"):
+        cta = "none"
     return PacePlan(
         pace=pace,
         message_depth=message_depth,

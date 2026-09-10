@@ -294,7 +294,10 @@ def _topic_block(t: TopicMatch | None) -> str:
     if t is None:
         return (
             "\n## Topic handling\n"
-            "No specific category matched — use the triage philosophy: answer the "
+            "No specific category matched. If it's a greeting / small talk / an "
+            "acknowledgement / a vague opener, just answer it naturally and warmly "
+            "— do not introduce cost, a country, fees, or booking that the lead "
+            "did not raise. Otherwise use the triage philosophy: answer the "
             "cheap/legitimacy questions fully, give the shape then bridge on "
             "specific-to-them questions, hard-deflect anything touching the "
             "non-negotiables.\n"

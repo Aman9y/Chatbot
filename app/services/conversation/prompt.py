@@ -34,9 +34,17 @@ def _cost_clause(settings: Settings) -> str:
     sensitive = set(settings.sensitive_cost_country_list)
     normal = [f"{c}: {r}" for c, r in ranges.items() if c not in sensitive]
     lines = [
-        "You may quote these approved per-country ranges, and ONLY these — each "
-        "range belongs to its country, never quote one country's range for "
-        "another, and never anything more precise than the range:",
+        "COST FIGURES ARE ANSWER-ONLY. Never volunteer a number, a range, or the "
+        "fees topic. Quote a figure ONLY when the lead has actually asked about "
+        "cost — for a specific country, or about cost/budget in general. On an "
+        "opening or generic message (\"I want to do MBBS abroad\", \"tell me "
+        "about the process\", a greeting) do NOT mention any figure or name a "
+        "country — ask what they're looking for instead.",
+        "",
+        "When they HAVE asked about cost, you may quote these approved per-country "
+        "ranges, and ONLY these — each range belongs to its country, never quote "
+        "one country's range for another, and never anything more precise than "
+        "the range:",
         "  " + " | ".join(normal),
     ]
     for c in settings.sensitive_cost_country_list:
@@ -59,7 +67,8 @@ def _cost_clause(settings: Settings) -> str:
         "- If the lead seems budget-constrained, surface the lower-tier countries "
         "(the ₹27–35 lakh band) naturally rather than letting them leave thinking "
         "everything costs ₹80 lakh.",
-        "- End toward a call — the real, personalised number needs a conversation.",
+        "- Note that the real, personalised number needs a conversation — but only "
+        "add the call as a next step if the per-turn CTA guidance allows it.",
         "",
         f"Georgia and Nepal: NEVER give the figure without the reason it is higher, "
         f"and ALWAYS offer {settings.counselor_name.strip() or 'the director'}'s "

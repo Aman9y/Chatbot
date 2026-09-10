@@ -333,11 +333,18 @@ def modes_reference() -> str:
     """Compact always-on reference for the system prompt (not per-turn)."""
 
     lines = [
-        "When you can't fully answer, the deflection is not one line you reuse — "
-        "it has 13 modes, picked by WHY you're deflecting. Same four beats every "
-        "time: acknowledge -> reassure a little -> be honest you're the assistant "
-        "-> hand to the director. Write it fresh each time; never send the same "
-        "sentence twice in one conversation (if you would, you're in mode 6).",
+        "This applies ONLY when you are actually declining to answer something "
+        "specific — a forbidden topic, a can't-know-without-your-case question, a "
+        "stall. A greeting, small talk, or a question you can simply answer is "
+        "NOT a deflection: just reply, no hand-off. Each turn, the per-turn "
+        "guidance tells you whether a deflection mode is in play; if it doesn't, "
+        "there is none.",
+        "",
+        "When you do deflect, it is not one line you reuse — there are 13 modes, "
+        "picked by WHY you're deflecting. Same four beats: acknowledge -> reassure "
+        "a little -> be honest you're the assistant -> hand to the director. Write "
+        "it fresh each time; never send the same sentence twice in one "
+        "conversation (if you would, you're in mode 6).",
         "",
     ]
     contact_label = {
