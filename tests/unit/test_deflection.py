@@ -170,3 +170,29 @@ def test_turn_hint_number_mode_names_the_phone():
 def test_every_mode_has_a_register_and_when():
     for m in MODES.values():
         assert m.register and m.when and m.title
+
+
+def test_no_register_calls_the_bot_an_assistant_or_promises_a_callback():
+    from app.services.conversation.deflection import modes_reference
+
+    banned = (
+        "i'm the assistant", "i'm a basic assistant", "i am an assistant",
+        "he'll reach out", "he will reach out", "will contact you",
+        "i'll set it up", "i'll set up", "can i set up", "can i arrange",
+        "would you like me to arrange", "shall i set",
+    )
+    for m in MODES.values():
+        low = m.register.lower()
+        for b in banned:
+            assert b not in low, (m.num, b)
+    ref = modes_reference("Stellar AI").lower()
+    assert "be honest you're the assistant" not in ref
+    assert "lead reaching out to the director" in ref
+
+
+def test_turn_hint_frames_number_as_the_lead_calling_him():
+    p = select_deflection(topic_match=_topic("can I get a loan"), objection=None, deflect_index=1)
+    hint = turn_hint(p, counselor_name="Rafique Shaikh", counselor_phone="+91 74478 67887")
+    low = hint.lower()
+    assert "for them to call or message him" in low
+    assert "never as him contacting them" in low

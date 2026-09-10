@@ -76,9 +76,10 @@ _TONE_NOTE: dict[ToneStage, str] = {
         "handles. Make the direct ask for a call or an office visit."
     ),
     "honest_handoff": (
-        "Honest handoff: \"I'm the assistant here and I don't want to keep giving you "
-        "half-answers on something this important — the right person is our counsellor. "
-        "Can I set up a quick call?\" Only works because it's true."
+        "Honest handoff: \"I don't want to keep giving you half-answers on "
+        "something this important — the right person is our director. His number "
+        "is there whenever you want to talk it through.\" Only works because it's "
+        "true."
     ),
 }
 
@@ -89,20 +90,26 @@ _CTA_NOTE: dict[CtaMode, str] = {
         "a short question that keeps them talking, or just a warm reply. This "
         "overrides any general instinct to pitch."
     ),
-    "soft": "Soft nudge: mention the call as the natural next step, lightly, once.",
+    "soft": (
+        "Soft nudge: mention a call with the director as the natural next step, "
+        "lightly, once — as something they can do ('worth a quick call with him'), "
+        "never as you arranging it or him calling them."
+    ),
     "direct": (
-        "Direct CTA: ask plainly for a yes to a call OR an office visit (their choice). "
-        "Never propose a clock time — the counsellor fixes the time. Free, ~15 min, "
-        "no obligation. Offer to include a parent."
+        "Direct CTA: ask plainly for a yes to a call OR an office visit (their "
+        "choice), framed as them reaching out to the director — give his number "
+        "for them to call/message, never 'I'll set it up' or 'he'll call you'. No "
+        "clock time. Free, ~15 min, no obligation. Offer to include a parent."
     ),
     "honest_handoff": (
-        "Honest-handoff close: admit the bot's limits, name their specific concern once, "
-        "say the counsellor is the right person, ask to set up the call or office visit."
+        "Honest-handoff close: be honest about your limits, name their specific "
+        "concern once, say the director is the right person, and give his number "
+        "for them to reach out — not 'shall I set it up'."
     ),
     "nurture_soft": (
-        "Past active pursuit. One friendly, low-pressure line or a single non-confidential "
-        "fact, with a soft 'whenever you want to talk it through, the counsellor's here'. "
-        "Do not chase."
+        "Past active pursuit. One friendly, low-pressure line or a single "
+        "non-confidential fact, with a soft 'whenever you want to talk it "
+        "through, the director's number is there'. Do not chase."
     ),
 }
 

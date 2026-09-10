@@ -336,6 +336,7 @@ def _deflection_block(plan: DeflectionPlan | None, settings: Settings) -> str:
         return ""
     return turn_hint(
         plan,
+        counselor_name=settings.counselor_name.strip(),
         counselor_phone=settings.counselor_phone.strip(),
         office_address=settings.office_address.strip(),
     )

@@ -18,6 +18,37 @@ def test_configured_values_appear():
     assert "12 MG Road" in text
 
 
+def test_bot_identity_is_stellar_ai_female_not_the_assistant():
+    text = render_system_prompt(Settings())
+    low = " ".join(text.lower().split())  # collapse markdown line wraps
+    assert "you are stellar ai" in low
+    assert 'as "she"' in low
+    assert "i am the automated assistant for" in low  # listed as a phrasing to avoid
+    assert "you are just stellar ai" in low
+    # a custom bot_name flows everywhere, including the deflection reference
+    t2 = render_system_prompt(Settings(bot_name="Acme Bot", bot_pronoun_subject="they"))
+    assert "You are Acme Bot" in t2
+    assert "Stellar AI" not in t2
+
+
+def test_contact_direction_lead_reaches_out_never_the_reverse():
+    text = render_system_prompt(Settings())
+    low = " ".join(text.lower().split())
+    assert "the lead reaches out to" in low
+    assert 'never say he "will call you"' in low
+    assert "the next move is theirs" in low
+    # no lingering "counsellor will reach out" close mechanic
+    assert "will reach out to set the time" not in low
+    assert "will take it from here" not in low
+
+
+def test_hindi_rules_carry_the_identity_and_contact_constraints():
+    text = render_system_prompt(Settings())
+    assert "Every rule in this prompt holds in every language" in text
+    assert "मैं Stellar AI" in text
+    assert "call कर सकते ह" in text  # them calling him, in the Hindi example
+
+
 def test_cost_clause_when_no_ranges_configured():
     text = render_system_prompt(Settings(country_cost_ranges="{}"))
     assert "no cost ranges are configured" in text.lower()

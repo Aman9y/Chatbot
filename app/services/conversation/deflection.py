@@ -53,10 +53,10 @@ MODES: dict[int, DeflectMode] = {
         1, "sensitive_topic", "Sensitive-topic deflect",
         "FMGE difficulty, licensing worries, 'will this degree work in India' — "
         "real fears with real answers that need a human's authority.",
-        "\"I understand the worry about FMGE — honestly it's more manageable than "
-        "most people assume, especially with the right university choice. That "
-        "university-matching part is where our director really helps; he's been "
-        "doing this over 10 years. Worth a quick call with him?\"",
+        "\"I understand the worry about FMGE — it's more manageable than most "
+        "people assume, especially with the right university choice. That "
+        "university-matching part is where {name} really helps; worth talking it "
+        "through with him directly.\"",
         "number",
     ),
     2: DeflectMode(
@@ -64,7 +64,7 @@ MODES: dict[int, DeflectMode] = {
         "financing, refunds, payment schedules, consultancy fee amount.",
         "\"Money questions deserve a proper conversation, not a text — and I'd "
         "rather you get exact numbers from someone who can look at your specific "
-        "case. Call Rafique Sir on {phone} whenever suits you.\"",
+        "case. You can call {name} on {phone} whenever suits you.\"",
         "number",
     ),
     3: DeflectMode(
@@ -79,8 +79,8 @@ MODES: dict[int, DeflectMode] = {
     4: DeflectMode(
         4, "no_data_yet", "No-data-yet deflect",
         "a named university or country the bot has no confirmed detail on.",
-        "\"That's a specific one — rather than give you a half-answer, let me get "
-        "you the accurate version from our director.\"",
+        "\"That's a specific one — rather than give you a half-answer, {name} is "
+        "the one who'd have the accurate detail. Worth checking with him.\"",
         "none",
     ),
     5: DeflectMode(
@@ -88,7 +88,7 @@ MODES: dict[int, DeflectMode] = {
         "something outside Stellar's service entirely (other courses, unrelated "
         "countries).",
         "\"That's outside what we handle directly, so I don't want to guess. If "
-        "it's connected to your MBBS plans, our director will know where to point "
+        "it's connected to your MBBS plans, {name} will know where to point "
         "you.\"",
         "none",
     ),
@@ -97,16 +97,15 @@ MODES: dict[int, DeflectMode] = {
         "the lead asks the same thing again after a first deflect. Don't repeat "
         "the first answer — acknowledge the loop.",
         "\"I know I'm being unhelpful on this one and I'm sorry — it's genuinely "
-        "not something I can answer accurately. Rafique Sir can, directly: "
-        "{phone}.\"",
+        "not something I can answer accurately. {name} can, directly: {phone}.\"",
         "number",
     ),
     7: DeflectMode(
         7, "frustrated_lead", "Pushy/frustrated-lead deflect",
         "the lead is annoyed at not getting a straight answer.",
-        "\"Fair — I'd be frustrated too. I'm a basic assistant, so on this I'd "
-        "just be guessing, and you deserve better than a guess. One call with our "
-        "director and you'll have the real answer.\"",
+        "\"Fair — I'd want a straight answer too. On this I'd only be guessing, "
+        "and you deserve better than a guess. {name} can give you the real "
+        "answer on a call: {phone}.\"",
         "number",
     ),
     8: DeflectMode(
@@ -122,8 +121,8 @@ MODES: dict[int, DeflectMode] = {
         "clear worry in the message — safety, homesickness, 'my child has never "
         "been away'.",
         "\"I hear you — this is your child, of course you're worried. Every parent "
-        "we work with feels this. That's actually why our director prefers "
-        "talking to parents directly rather than through messages.\"",
+        "we work with feels this, and it's the kind of thing that's better "
+        "talked through with {name} directly than over messages.\"",
         "address",
     ),
     10: DeflectMode(
@@ -149,8 +148,8 @@ MODES: dict[int, DeflectMode] = {
         "premium-country figures, PG cost, admission guarantees — permanent "
         "no-go regardless of data.",
         "\"I'm not going to throw a number at you without context, because the "
-        "honest answer really does depend on your case. Our director gives you "
-        "the full picture properly.\"",
+        "honest answer really does depend on your case. {name} gives you the full "
+        "picture properly.\"",
         "none",
         permanent=True,
     ),
@@ -158,7 +157,7 @@ MODES: dict[int, DeflectMode] = {
         13, "genuinely_unknown", "Genuinely-unknown deflect",
         "the bot simply has no idea and shouldn't pretend.",
         "\"Honestly, I don't know — and I'd rather say that than make something "
-        "up. Our director will know.\"",
+        "up. {name} will know.\"",
         "none",
     ),
 }
@@ -329,9 +328,10 @@ def _resolve_contact(mode: DeflectMode, deflect_index: int, *, address_given: bo
 
 
 # --- prompt rendering ----------------------------------------------------
-def modes_reference() -> str:
+def modes_reference(bot_name: str = "") -> str:
     """Compact always-on reference for the system prompt (not per-turn)."""
 
+    who = bot_name.strip() or "the bot's name"
     lines = [
         "This applies ONLY when you are actually declining to answer something "
         "specific — a forbidden topic, a can't-know-without-your-case question, a "
@@ -342,9 +342,13 @@ def modes_reference() -> str:
         "",
         "When you do deflect, it is not one line you reuse — there are 13 modes, "
         "picked by WHY you're deflecting. Same four beats: acknowledge -> reassure "
-        "a little -> be honest you're the assistant -> hand to the director. Write "
-        "it fresh each time; never send the same sentence twice in one "
-        "conversation (if you would, you're in mode 6).",
+        "a little -> be honest about what you can and can't do -> point them to "
+        "the director. Write it fresh each time; never send the same sentence "
+        "twice in one conversation (if you would, you're in mode 6).",
+        "",
+        f"In every register: you are still {who} (not 'the assistant'), and the "
+        "direction of contact is the lead reaching out to the director — never "
+        "'he'll call you' or 'I'll set it up'.",
         "",
     ]
     contact_label = {
@@ -369,18 +373,27 @@ def modes_reference() -> str:
     return "\n".join(lines)
 
 
-def turn_hint(plan: DeflectionPlan, *, counselor_phone: str = "", office_address: str = "") -> str:
+def turn_hint(
+    plan: DeflectionPlan,
+    *,
+    counselor_name: str = "",
+    counselor_phone: str = "",
+    office_address: str = "",
+) -> str:
     """The per-turn block: the selected mode's full register + resolved contact."""
 
     m = plan.mode
-    register = m.register.replace("{phone}", counselor_phone or "the director's number")
+    register = m.register.replace("{name}", counselor_name or "the director")
+    register = register.replace("{phone}", counselor_phone or "the director's number")
     register = register.replace("{address}", office_address or "our office")
+    him = counselor_name or "the director"
 
     contact_directive = {
-        "none": "Do NOT include a phone number or the address this turn — a soft "
-        "'worth a quick call?' is enough.",
-        "number": f"Offer the director's number ({counselor_phone or 'the direct line'}) "
-        "in this reply. Not the address.",
+        "none": "Do NOT include a phone number or the address this turn — pointing "
+        f"them to {him} is enough, no number.",
+        "number": f"Give {him}'s number ({counselor_phone or 'the direct line'}) "
+        "for THEM to call or message him — never as him contacting them. Not the "
+        "address.",
         "address": f"Give the office address ({office_address or 'the office'}) in this "
         "reply — this is the mode where the address does the work. Not the number.",
         "address_brief": "The address has already been shared — if it's asked for "

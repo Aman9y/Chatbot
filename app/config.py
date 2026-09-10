@@ -218,6 +218,11 @@ class Settings(BaseSettings):
     # --- system-prompt placeholders (plan §7 / docs/system-prompt.md) --
     # Unset values render as safe generic phrasing ("our team" / "our counselor").
     company_name: str = "Stellar Educonsultancy"
+    # The bot's own identity. It presents as this name and as "she"/"her"
+    # (bot_pronoun_*). "" -> falls back to a generic "the assistant".
+    bot_name: str = "Stellar AI"
+    bot_pronoun_subject: str = "she"
+    bot_pronoun_possessive: str = "her"
     counselor_name: str = "Rafique Shaikh"
     # The bot may give this out in Georgia/Nepal cost replies and when a lead
     # asks to talk to someone. "" -> the bot never shares a number.

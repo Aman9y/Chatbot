@@ -31,10 +31,25 @@ def test_fallback_avoids_a_line_already_used():
     assert first != second
 
 
-def test_nurture_phase_does_not_push_a_number():
+def test_nurture_phase_gives_the_number_for_the_lead_to_use():
     msg = safe_fallback_message(_S, engagement_phase="nurture")
-    assert "+91" not in msg
     assert "Rafique Shaikh" in msg
+    # no "he'll call you" framing
+    assert "reach out to you" not in msg.lower()
+    assert "will call" not in msg.lower()
+
+
+def test_no_fallback_line_calls_the_bot_an_assistant_or_promises_a_callback():
+    from app.services.guard.fallback import _NURTURE, _POOLS
+
+    banned = ("assistant", "he'll reach out", "he will reach out", "i'll set",
+              "can i set", "can i arrange", "shall i set", "want me to arrange",
+              "would you like me to arrange")
+    for pool in list(_POOLS.values()) + [_NURTURE]:
+        for line in pool:
+            low = line.lower()
+            for b in banned:
+                assert b not in low, (b, line)
 
 
 def test_legitimacy_fallback_uses_address_not_number():

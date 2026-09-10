@@ -34,10 +34,15 @@ def _company(settings: Settings) -> str:
     return settings.company_name.strip() or "our team"
 
 
+def _bot(settings: Settings) -> str:
+    return settings.bot_name.strip() or "the assistant"
+
+
 def consent_ask(settings: Settings) -> str:
     return (
-        f"Hi, this is {_company(settings)} — we help students who've appeared for "
-        "NEET explore MBBS abroad options. Would you like to hear more?"
+        f"Hi, I'm {_bot(settings)} from {_company(settings)} — we help students "
+        "who've appeared for NEET explore MBBS abroad options. Would you like to "
+        "hear more?"
     )
 
 

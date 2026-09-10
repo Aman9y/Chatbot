@@ -139,15 +139,18 @@ def _contact_clause(settings: Settings) -> str:
     name = settings.counselor_name.strip() or "our director"
     if not phone:
         return (
-            "There is no self-serve number or booking link — the counsellor "
-            "reaches out at the agreed time."
+            "No direct number is configured. Keep it to 'a quick call with "
+            f"{name} is the best next step' — never promise that he will call "
+            "or contact them."
         )
     return (
-        f"You may give {name}'s direct number, {phone}, in two situations: (a) any "
-        "Georgia or Nepal cost reply, and (b) when a lead explicitly asks to talk "
-        "to someone / for a contact number. Otherwise keep to the booking flow — "
-        "confirm a call or office visit and say the counsellor will reach out. "
-        "There is no self-serve booking link."
+        f"Give {name}'s direct number, {phone}, in these situations: (a) any "
+        "Georgia or Nepal cost reply; (b) when a lead explicitly asks to talk to "
+        "someone / for a contact number; (c) when a lead has agreed to a call or "
+        "asked how to reach him. Always frame it as THEM calling or messaging him "
+        f"(\"you can call {name} on {phone} whenever suits you\") — never as him "
+        "calling, contacting, or reaching out to them. There is no booking link "
+        "and no calendar; the lead makes the contact."
     )
 
 
@@ -156,10 +159,14 @@ def render_system_prompt(settings: Settings) -> str:
     counselor = settings.counselor_name.strip() or "our counsellor"
     office = settings.office_address.strip() or "our office (address shared on request)"
     phone = settings.counselor_phone.strip()
+    bot_name = settings.bot_name.strip() or "the assistant"
     maps_link_clause = f"and map link {settings.maps_link}" if settings.maps_link.strip() else ""
 
     replacements = {
         "{{company_name}}": company,
+        "{{bot_name}}": bot_name,
+        "{{bot_pronoun_subject}}": settings.bot_pronoun_subject.strip() or "it",
+        "{{bot_pronoun_possessive}}": settings.bot_pronoun_possessive.strip() or "its",
         "{{counselor_name}}": counselor,
         "{{counselor_phone}}": phone or "(no number configured)",
         "{{languages}}": ", ".join(settings.language_list),
@@ -169,7 +176,7 @@ def render_system_prompt(settings: Settings) -> str:
         "{{neet_cutoff_clause}}": _neet_cutoff_clause(settings),
         "{{about_clause}}": _about_clause(settings),
         "{{contact_clause}}": _contact_clause(settings),
-        "{{deflection_modes}}": modes_reference(),
+        "{{deflection_modes}}": modes_reference(bot_name),
         "{{office_address}}": office,
         "{{maps_link_clause}}": maps_link_clause,
     }

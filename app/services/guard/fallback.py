@@ -18,33 +18,37 @@ from app.services.conversation.deflection import DeflectionPlan, select_deflecti
 # reply. `{name}` -> counsellor name, `{phone}` -> counsellor phone,
 # `{address}` -> office address. Lines that reference a channel are only offered
 # when the plan's resolved contact allows it (see `_contact_ok`).
+#
+# House rules baked into every line:
+#  - the reply is from {{bot_name}} ("Stellar AI"); never "I'm the assistant/bot".
+#  - direction of contact is always the LEAD reaching out to {name} — never
+#    "he'll call you", "I'll set it up", "can I arrange a call".
 _POOLS: dict[int, list[str]] = {
     1: [
-        "That worry is a fair one, and honestly it's more manageable than most "
-        "people assume with the right university. {name} has done this for years "
-        "and can walk you through it properly — worth a quick call?",
-        "This is exactly the kind of thing {name} is better placed to answer than "
-        "I am. Can I set up a short call so you get it first-hand?",
+        "That worry is a fair one, and it's more manageable than most people "
+        "assume with the right university. This is where {name} really helps — "
+        "worth talking it through with him directly.",
+        "This is exactly the kind of thing {name} goes deep on. Worth putting it "
+        "to him yourself when you get a chance.",
     ],
     2: [
         "Money questions deserve a proper conversation, not a text — {name} can "
-        "look at your specific case and give you exact numbers. Reach him on "
-        "{phone} whenever suits you.",
+        "look at your specific case and give you exact numbers. You can call him "
+        "on {phone} whenever suits you.",
         "I'd rather you got the real figures from {name} directly than a vague "
-        "answer from me. A quick call sorts it out — shall I set one up?",
+        "answer from me. His number is {phone} — reach out any time.",
     ],
     3: [
         "I genuinely can't call this well without your full picture, and guessing "
-        "would do you a disservice. That's exactly what a 15-minute call with "
-        "{name} is for — shall I set it up?",
-        "This one really depends on your specific situation. {name} can give you a "
-        "proper read on a short call — want me to arrange it?",
+        "would do you a disservice — that's the kind of thing a short chat with "
+        "{name} sorts out.",
+        "This really depends on your specific situation. {name} can give you a "
+        "proper read; worth raising it with him directly.",
     ],
     4: [
-        "That's a specific one — rather than give you a half-answer, let me get "
-        "you the accurate version from {name}.",
-        "I don't want to guess on that. {name} will have the accurate detail — "
-        "can I set up a quick call?",
+        "That's a specific one — rather than give you a half-answer, {name} will "
+        "have the accurate detail. Worth checking with him.",
+        "I don't want to guess on that. {name} is the one who'd know for sure.",
     ],
     5: [
         "That's outside what we handle directly, so I don't want to guess. If "
@@ -53,15 +57,15 @@ _POOLS: dict[int, list[str]] = {
     6: [
         "I know I keep coming up short on this and I'm sorry — it's genuinely not "
         "something I can answer accurately. {name} can, directly: {phone}.",
-        "I'm clearly not the right one to answer this properly, and I don't want "
-        "to keep you going in circles. {name} can help directly on {phone}.",
+        "I'm clearly not the one to get you a solid answer here, and I don't want "
+        "to keep you going in circles. Call {name} directly on {phone}.",
     ],
     7: [
-        "Fair — I'd be frustrated too. I'm a basic assistant, so here I'd just be "
-        "guessing, and you deserve better than that. One call with {name} and "
-        "you'll have the real answer.",
-        "You're right to want a straight answer. I can't give you an accurate one "
-        "on this — but {name} can, on a short call.",
+        "Fair — I'd want a straight answer too. On this I'd only be guessing, and "
+        "you deserve better than that. {name} can give you the real answer on a "
+        "call: {phone}.",
+        "You're right to push. I can't give you an accurate answer on this one — "
+        "{name} can, on {phone}.",
     ],
     8: [
         "Completely fair to ask. We're at {address} — you're welcome to walk in "
@@ -71,45 +75,45 @@ _POOLS: dict[int, list[str]] = {
     ],
     9: [
         "I hear you — this is your child, of course you're worried. Every parent "
-        "we work with feels this, and it's exactly why {name} prefers speaking "
-        "with parents directly. Can I set that up?",
+        "we work with feels this, and it's the kind of thing that's better "
+        "talked through with {name} directly than over messages.",
         "That concern is completely understandable. {name} talks parents through "
-        "this properly — would you like me to arrange a call?",
+        "exactly this — worth speaking with him about it.",
     ],
     10: [
         "Fair thing to compare. I'd just check whether they work only with "
         "government institutes and whether the full cost is transparent upfront — "
-        "those two questions separate most consultants. Happy for you to ask us "
-        "the same on a call.",
+        "those two questions separate most consultants. You're welcome to put the "
+        "same to us.",
     ],
     11: [
         "I could send a document, but honestly it won't tell you what applies to "
-        "you — and that's the part that matters. Fifteen minutes with {name} does "
-        "more. Shall I set it up?",
-        "A generic pack won't answer what's specific to your case. A short call "
-        "with {name} will — want me to arrange one?",
+        "you — and that's the part that matters. A short conversation with {name} "
+        "does more.",
+        "A generic pack won't answer what's specific to your case. {name} can, "
+        "properly — worth a direct chat with him.",
     ],
     12: [
         "I'm not going to put a number on that without context — the honest "
         "answer really does depend on your case. {name} gives you the full "
-        "picture properly on a call.",
+        "picture properly.",
         "That's not something I can give you a figure for — it varies too much by "
-        "situation. {name} covers it accurately on a short call.",
+        "situation. {name} covers it accurately with you directly.",
     ],
     13: [
         "Honestly, I don't know that one — and I'd rather say so than make "
         "something up. {name} will know.",
-        "I don't want to guess at that. {name} can give you a proper answer — "
-        "shall I set up a call?",
+        "I don't want to guess at that. {name} is the one who can give you a "
+        "proper answer.",
     ],
 }
 
 # nurture phase: never chase, no number push
 _NURTURE = [
-    "Whenever you'd like to talk it through, {name} is here — just say the word "
-    "and I'll set up a short call.",
-    "No rush at all. When you want a proper look at your options, {name} is happy "
-    "to help — just message here.",
+    "No rush at all. Whenever you want to talk it through, {name}'s number is "
+    "{phone}.",
+    "Whenever you're ready for a proper look at your options, you can reach "
+    "{name} directly — just message here in the meantime.",
 ]
 
 
@@ -128,7 +132,7 @@ def _contact_ok(line: str, plan: DeflectionPlan) -> bool:
 
 
 def _fill(line: str, settings: Settings) -> str:
-    name = settings.counselor_name.strip() or "our counsellor"
+    name = settings.counselor_name.strip() or "the director"
     return (
         line.replace("{name}", name)
         .replace("{phone}", settings.counselor_phone.strip() or "his direct line")
@@ -176,8 +180,8 @@ def safe_fallback_message(
             return filled
 
     # everything in the pool has been used — fall back to a plain, always-safe line
-    name = settings.counselor_name.strip() or "our counsellor"
+    name = settings.counselor_name.strip() or "the director"
     return (
-        f"This is one for {name} rather than me — can I set up a short call so you "
-        "get an accurate answer?"
+        f"This is really one for {name} rather than me — worth raising it with him "
+        "directly for an accurate answer."
     )

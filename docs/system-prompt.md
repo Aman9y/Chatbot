@@ -39,7 +39,8 @@ for the in-window conversational LLM. The deterministic rules in
 | Key | Needed for | Status |
 |---|---|---|
 | `company_name` | identity line, disclosure | ✅ "Stellar Educonsultancy" (2026-09-09) |
-| `counselor_name` / `counselor_phone` | handoff phrasing, direct-number replies | ✅ Rafique Shaikh ("Rafique Sir") / +91 74478 67887 (2026-09-09) |
+| `bot_name` / `bot_pronoun_*` | the bot's own identity | ✅ "Stellar AI", she/her (2026-09-10). Bot presents as this name, never "the assistant"; direct "who are you" → "I'm Stellar AI". |
+| `counselor_name` / `counselor_phone` | handoff phrasing, direct-number replies | ✅ Rafique Shaikh ("Rafique Sir") / +91 74478 67887 (2026-09-09). **Contact direction: the lead always calls/messages him — the bot never says he "will call / reach out / be in touch", never offers to "set up" a call.** |
 | `neet_year` | which cycle the 1,200 leads sat — determines which cutoff/route applies | ❓ (critique B9) |
 | `neet_cutoff_general` / `neet_cutoff_obc` | eligibility framing | plan says 213 / 175 — confirm + date it |
 | `country_cost_ranges` (JSON) | per-country approved ranges — see `.env` / `leadbot check-config` | confirmed 2026-09-09 (Stellar): 7 countries, Georgia/Nepal need the reason + director's number |
