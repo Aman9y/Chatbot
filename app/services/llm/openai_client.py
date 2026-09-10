@@ -19,6 +19,9 @@ class OpenAILLMClient(LLMClient):
         from openai import AsyncOpenAI
 
         self._settings = settings
+        # Subclasses (OpenRouter) may set this to inject non-standard body fields
+        # into every request — e.g. provider-routing constraints.
+        self._extra_body: dict[str, Any] | None = None
         self._client = AsyncOpenAI(
             api_key=settings.openai_api_key or None,
             timeout=settings.llm_timeout_seconds,
@@ -50,6 +53,8 @@ class OpenAILLMClient(LLMClient):
             kwargs["temperature"] = temperature
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if self._extra_body:
+            kwargs["extra_body"] = self._extra_body
 
         start = time.perf_counter()
         try:
@@ -60,6 +65,9 @@ class OpenAILLMClient(LLMClient):
 
         choice = resp.choices[0]
         usage = resp.usage
+        # OpenRouter reports which upstream endpoint actually served the request
+        # (plain OpenAI does not) — keep it for the trace / routing audit.
+        upstream = getattr(resp, "provider", None)
         return LLMResponse(
             text=(choice.message.content or "").strip(),
             model=model,
@@ -68,7 +76,7 @@ class OpenAILLMClient(LLMClient):
             output_tokens=getattr(usage, "completion_tokens", 0) or 0,
             latency_ms=latency_ms,
             finish_reason=choice.finish_reason,
-            raw={"id": getattr(resp, "id", None)},
+            raw={"id": getattr(resp, "id", None), "upstream_provider": upstream},
         )
 
     async def aclose(self) -> None:

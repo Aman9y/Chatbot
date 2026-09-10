@@ -75,10 +75,12 @@ def check_config() -> None:
     typer.echo(f"reply_model           : {reply_model(settings)}")
     typer.echo(f"classifier_model      : {classifier_model(settings)}")
     if settings.llm_provider == "openrouter":
+        from app.services.llm.openrouter_client import build_routing_extra_body
+
         typer.echo(
-            "  data path           : lead conversation -> OpenRouter -> upstream host "
-            "(Google for the gemini route)"
+            "  data path           : lead conversation -> OpenRouter -> upstream host"
         )
+        typer.echo(f"  routing pin         : {build_routing_extra_body(settings)}")
         typer.echo(
             f"  data policy confirmed : {settings.openrouter_data_policy_confirmed}"
         )

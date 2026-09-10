@@ -124,8 +124,19 @@ class Settings(BaseSettings):
     # Optional attribution headers OpenRouter shows on its dashboard.
     openrouter_app_url: str = ""
     openrouter_app_title: str = ""
-    # Operator must flip this true once OpenRouter's data-handling policy has
-    # been read and accepted for lead PII. Until then check-config flags it.
+    # --- OpenRouter routing safety pin (enforced in code on every request) ---
+    # Restrict upstream routing so lead data can only reach an endpoint we have
+    # vetted. Defaults: Google Vertex only (Vertex does not train on API data;
+    # AI Studio's terms can), refuse any endpoint that stores data
+    # non-transiently, request zero-data-retention, and never silently fall back
+    # to another provider. Empty openrouter_provider_only removes the allow-list.
+    openrouter_provider_only: str = "google-vertex"
+    openrouter_data_collection: Literal["", "allow", "deny"] = "deny"
+    openrouter_require_zdr: bool = True
+    openrouter_allow_fallbacks: bool = False
+    # Operator must flip this true once the routing pin has been proven with a
+    # live call that reported the expected upstream provider, AND OpenRouter's
+    # data-handling policy has been accepted for lead PII. check-config flags it.
     openrouter_data_policy_confirmed: bool = False
     llm_temperature: float = 0.4
     llm_max_output_tokens: int = 1600

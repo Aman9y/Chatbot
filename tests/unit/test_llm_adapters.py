@@ -214,6 +214,63 @@ async def test_openrouter_adapter(openrouter_stub):
     assert kwargs["messages"][0] == {"role": "system", "content": "you are a bot"}
     assert kwargs["temperature"] == 0.4
 
+    # the routing safety pin rides on every request
+    assert kwargs["extra_body"] == {
+        "provider": {
+            "only": ["google-vertex"],
+            "data_collection": "deny",
+            "allow_fallbacks": False,
+        },
+        "zdr": True,
+    }
+
+
+def test_openrouter_routing_pin_is_configurable():
+    from app.services.llm.openrouter_client import build_routing_extra_body
+
+    # defaults: vertex-only, deny, zdr, no fallback
+    d = build_routing_extra_body(Settings(llm_provider="openrouter", openrouter_api_key="k"))
+    assert d == {
+        "provider": {
+            "only": ["google-vertex"],
+            "data_collection": "deny",
+            "allow_fallbacks": False,
+        },
+        "zdr": True,
+    }
+    # relaxable from config
+    loose = build_routing_extra_body(
+        Settings(
+            llm_provider="openrouter",
+            openrouter_api_key="k",
+            openrouter_provider_only="",
+            openrouter_data_collection="",
+            openrouter_require_zdr=False,
+            openrouter_allow_fallbacks=True,
+        )
+    )
+    assert loose == {}
+
+
+async def test_openrouter_upstream_provider_is_captured(openrouter_stub):
+    from app.services.llm.openrouter_client import OpenRouterLLMClient
+
+    openrouter_stub.create.return_value = SimpleNamespace(
+        id="gen-xyz",
+        provider="Google",
+        choices=[
+            SimpleNamespace(message=SimpleNamespace(content="ok"), finish_reason="stop")
+        ],
+        usage=SimpleNamespace(prompt_tokens=5, completion_tokens=1),
+    )
+    client = OpenRouterLLMClient(
+        Settings(llm_provider="openrouter", openrouter_api_key="sk-or-test")
+    )
+    resp = await client.complete(
+        system="s", messages=MSGS, model="google/gemini-3.7-flash", max_output_tokens=50
+    )
+    assert resp.raw["upstream_provider"] == "Google"
+
 
 def test_openrouter_requires_key_from_env():
     from app.services.llm.openrouter_client import OpenRouterLLMClient
