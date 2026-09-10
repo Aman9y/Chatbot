@@ -207,6 +207,69 @@ def test_bot_quoting_two_ranges_is_still_blocked_even_after_a_budget_message(gua
     assert "multi_country_cost" in v.rules
 
 
+# --- review notes §1: the guard's job changed — wrong-answer cases -----
+def test_wrong_countrys_range_quoted_for_the_country_asked_about(guard):
+    # asked about Uzbekistan (₹30–35L), bot quotes Georgia's ₹38–55L band.
+    v = guard.check(
+        "For Uzbekistan you're looking at about ₹38–55 lakh, visa and travel "
+        "included.",
+        context=_ctx(conversation_text="user: what does Uzbekistan cost?"),
+    )
+    assert not v.allowed
+    assert "cost_outside_approved_range" in v.rules
+
+
+def test_blended_range_across_countries_is_blocked(guard):
+    # ₹34–60 lakh matches no single approved country — a blended/invented figure.
+    v = guard.check(
+        "Overall you should plan for around ₹34–60 lakh depending on the country, "
+        "with visa and accommodation handled.",
+        context=_ctx(),
+    )
+    assert not v.allowed
+    assert "blended_cost_range" in v.rules
+
+
+def test_countryless_range_that_matches_an_approved_band_is_allowed(guard):
+    v = guard.check(
+        "The economical route runs about ₹30–35 lakh, and that covers visa "
+        "processing and accommodation setup. Want a quick call?",
+        context=_ctx(),
+    )
+    assert v.allowed, v.rules
+
+
+@pytest.mark.parametrize("country", ["Belarus", "Armenia", "Poland", "Philippines"])
+def test_range_for_a_country_not_on_the_approved_list_is_blocked(guard, country):
+    v = guard.check(
+        f"{country} comes to roughly ₹30–35 lakh with visa and travel handled.",
+        context=_ctx(),
+    )
+    assert not v.allowed
+    assert {"unapproved_cost_figure", "premium_cost_disclosure"} & set(v.rules)
+
+
+def test_nepal_figure_bare_without_number_blocked(guard):
+    v = guard.check(
+        "Nepal works out to ₹57–80 lakh because it's so close to India and the "
+        "academics mirror ours. Visa and travel are handled throughout.",
+        context=_ctx(),
+    )
+    assert not v.allowed
+    assert "sensitive_cost_needs_contact" in v.rules
+
+
+def test_georgia_range_misquoted_low_still_blocked_as_out_of_range(guard):
+    # bot low-balls Georgia to the CIS band to make it look cheaper.
+    v = guard.check(
+        "Georgia is really only about ₹30–35 lakh, visa included — call Rafique "
+        "Sir on +91 74478 67887 for the exact figure.",
+        context=_ctx(),
+    )
+    assert not v.allowed
+    assert "cost_outside_approved_range" in v.rules
+
+
 def test_countryless_figure_above_the_whole_envelope_blocked(guard):
     v = guard.check(
         "MBBS abroad is about 95 lakh with everything included.", context=_ctx()

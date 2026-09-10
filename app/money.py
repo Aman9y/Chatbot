@@ -139,6 +139,16 @@ def has_range_span(text: str) -> bool:
     return bool(_RANGE_SPAN.search(text or ""))
 
 
+def range_spans_in_lakh(text: str) -> list[tuple[float, float]]:
+    """(low, high) in lakh for every written range span in `text`."""
+    out: list[tuple[float, float]] = []
+    for m in _RANGE_SPAN.finditer(text or ""):
+        bounds = range_to_lakh(m.group(0))
+        if bounds:
+            out.append(bounds)
+    return out
+
+
 def figures_in_lakh(text: str) -> list[float]:
     """Every money amount in `text`, as lakh. Range spans yield BOTH endpoints;
     the rest are parsed individually. A currency-marked bare number with no

@@ -239,6 +239,98 @@ def find_guarantees(text: str) -> list[str]:
     return seen
 
 
+# --- overpromising / overselling (review notes §3) -------------------
+# The mirror of the leak detectors: these catch the bot drifting toward comfort —
+# implying admission is easy, FMGE is trivial, outcomes are assured, risk is
+# nil, safety is absolute. The audience is 17-year-olds and anxious parents
+# making an irreversible ₹30L+ decision; an overpromise that leads a family to
+# commit is a worse outcome than a deflection that loses a lead. Honest
+# reassurance is fine ("more manageable than most people assume", "safer than
+# students expect", "many students clear the FMGE") — these patterns are tuned
+# to miss those and catch the assertions of certainty / ease.
+
+_OVERPROMISE = re.compile(
+    r"("
+    # admission / getting in is certain or easy
+    r"admissions?\s+(?:is|are|will be)\s+(?:basically\s+|pretty much\s+|practically\s+"
+    r"|just\s+|more or less\s+|almost\s+)?(?:a\s+)?(?:formality|guaranteed|sorted|"
+    r"as good as done|done deal|certain|in the bag)"
+    r"|(?:getting|to get)\s+(?:in|admission|a seat)\s+(?:\w+\s+){0,2}is\s+"
+    r"(?:easy|simple|guaranteed|no (?:problem|trouble|issue)|a formality|"
+    r"straightforward|a breeze)"
+    r"|easy\s+to\s+get\s+(?:in|admission|a seat)"
+    r"|you(?:'ll| will| are|'re)\s+(?:definitely\s+|certainly\s+|surely\s+|easily\s+"
+    r"|100%\s+|for sure\s+|sure to\s+|guaranteed to\s+)?(?:get\s+"
+    r"(?:in\b|admission|a seat|selected)"
+    r"(?!\s+(?:support|help|guidance|assistance|counsel|advice|process|touch|docs?|documents?))"
+    r"|be\s+(?:selected|admitted))"
+    r"|your\s+(?:admission|seat)\s+is\s+(?:confirmed|sorted|secure|guaranteed"
+    r"|as good as done|basically done|in the bag)"
+    r"|no\s+(?:trouble|problem|issue|difficulty|worries?)\s+(?:getting|with)\s+"
+    r"(?:in|admission|a seat)"
+    # FMGE / licensing downplayed
+    r"|(?:fmge|next exam|the screening (?:exam|test)|licen[cs]ing exam)\s+"
+    r"(?:is|is going to be|will be)\s+(?:pretty\s+|quite\s+|very\s+|really\s+|so\s+"
+    r"|that\s+|totally\s+|super\s+|basically\s+|just\s+|pretty much\s+|practically\s+"
+    r"|more or less\s+|almost\s+)?(?:easy|simple|straightforward|a formality"
+    r"|no big deal|nothing (?:to worry about|serious|much))"
+    r"|(?:fmge|next exam|the screening (?:exam|test)|licen[cs]ing exam)\s+"
+    r"(?:isn'?t|is not|won'?t be|ain'?t)\s+(?:that\s+|so\s+|really\s+|very\s+|too\s+"
+    r"|all that\s+)?(?:hard|difficult|tough|a big deal|bad|an issue|a problem|a concern)"
+    r"|(?:easily|comfortably)\s+(?:clear|pass|crack|get through)\s+(?:the\s+)?"
+    r"(?:fmge|next|screening (?:exam|test))"
+    r"|(?:clear|pass|crack)\s+(?:the\s+)?(?:fmge|next|screening (?:exam|test))\s+"
+    r"(?:easily|no problem|first (?:try|attempt|go)|without (?:any\s+)?"
+    r"(?:issues?|problems?|trouble))"
+    r"|most\s+(?:students|people|of them)\s+(?:clear|pass|crack)\s+"
+    r"(?:it|fmge|the fmge|next)\s+(?:easily|first (?:try|attempt|go)|without "
+    r"(?:any\s+)?(?:issues?|problems?))"
+    r"|(?:fmge|next)\s+pass\s+rate\s+is\s+(?:very|really|super|extremely)\s+high"
+    r"|you(?:'ll| will)\s+(?:definitely\s+|easily\s+|for sure\s+|certainly\s+)?"
+    r"(?:clear|pass|crack)\s+(?:the\s+)?(?:fmge|next|it)\b"
+    # guaranteed career / outcome
+    r"|you(?:'ll| will|'re| are)\s+(?:definitely\s+|certainly\s+|for sure\s+|100%\s+"
+    r"|guaranteed to\s+)?(?:be|become)\s+a\s+doctor"
+    r"|guaranteed\s+(?:career|future|job|success|placement|outcome)"
+    r"|your\s+(?:career|future)\s+is\s+(?:secure|sorted|set|guaranteed|safe)\b"
+    # minimized risk
+    r"|(?:there(?:'s| is)\s+)?no\s+(?:real\s+)?risk\b(?!\s+of\b)"
+    r"|zero\s+risk|risk[- ]free|nothing\s+(?:can|will|could)\s+go\s+wrong"
+    r"|nothing\s+to\s+lose|you\s+have\s+nothing\s+to\s+lose|totally\s+safe\s+bet"
+    r"|can'?t\s+go\s+wrong"
+    # over-reassurance on safety
+    r"|(?:100%|completely|totally|fully|absolutely|perfectly|entirely)\s+safe\b"
+    r"|(?:completely|totally|absolutely)\s+(?:risk[- ]free|worry[- ]free|secure)"
+    r"|you(?:'ll| will)\s+be\s+(?:totally|completely|perfectly|absolutely)\s+fine"
+    r"|no\s+safety\s+(?:concerns?|issues?|worries?)\s+(?:at all|whatsoever)"
+    r")",
+    re.IGNORECASE,
+)
+
+_BARE_NOTHING_TO_WORRY = re.compile(r"nothing\s+to\s+worry\s+about", re.IGNORECASE)
+_WORRY_CONTEXT = re.compile(
+    r"\b(fmge|next|exam|screening|safe|safety|risk|admission|crime|security|"
+    r"war|recogni[sz]\w*|degree|valid)\w*",
+    re.IGNORECASE,
+)
+
+
+def find_overpromise(text: str) -> list[str]:
+    """Phrases that promise an outcome or downplay a known difficulty."""
+
+    hits = [m.group(0).strip() for m in _OVERPROMISE.finditer(text or "")]
+    for m in _BARE_NOTHING_TO_WORRY.finditer(text or ""):
+        window = text[max(0, m.start() - 80) : m.end() + 80]
+        if _WORRY_CONTEXT.search(window):
+            hits.append(m.group(0))
+    seen: list[str] = []
+    for h in hits:
+        k = re.sub(r"\s+", " ", h.lower())
+        if k not in seen:
+            seen.append(k)
+    return seen
+
+
 # --- PG (postgraduate) cost ----------------------------------------
 
 _PG_CONTEXT = re.compile(

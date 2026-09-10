@@ -93,6 +93,7 @@ class ResponseGuard:
         violations += self._check_financing(text, ctx)
         violations += self._check_payment_terms(text)
         violations += self._check_guarantees(text)
+        violations += self._check_overpromise(text)
         violations += self._check_pg_cost(text)
         violations += self._check_meta_leak(text)
 
@@ -174,6 +175,31 @@ class ResponseGuard:
             and not money.has_range_span(text)
             and all(round(v, 1) in lead_lakh for v in reply_lakh)
         )
+
+        # 2b. A range span the bot introduced, with no country and no India
+        #     context, must match an approved country range exactly — otherwise
+        #     it is a blended / invented figure (review notes §1).
+        if (
+            not named
+            and not echoing_budget
+            and not (ctx.india_compare_bounds and detectors.india_context(haystack))
+        ):
+            approved = set(ctx.country_bounds.values())
+            if ctx.india_compare_bounds:
+                approved.add(ctx.india_compare_bounds)
+            for span in money.range_spans_in_lakh(text):
+                if not any(
+                    abs(span[0] - a[0]) < 0.5 and abs(span[1] - a[1]) < 0.5
+                    for a in approved
+                ):
+                    return [
+                        Violation(
+                            "blended_cost_range",
+                            f"₹{span[0]:g}–{span[1]:g} lakh",
+                            "a cost range that matches no approved country range — "
+                            "likely a blended or invented figure",
+                        )
+                    ]
 
         # 3. Strict: one country per cost reply. Two named countries + figures
         #    means the lead can't tell which range is which — unless the bot is
@@ -307,6 +333,21 @@ class ResponseGuard:
                     ", ".join(hits),
                     "guarantee/assurance of an outcome "
                     "(plan §2: never guarantee admission/intake/cost)",
+                )
+            ]
+        return []
+
+    def _check_overpromise(self, text: str) -> list[Violation]:
+        hits = detectors.find_overpromise(text)
+        if hits:
+            return [
+                Violation(
+                    "overpromise",
+                    ", ".join(hits[:3]),
+                    "promises an outcome or downplays a known difficulty "
+                    "(admission / FMGE / safety / risk) — review notes §3: an "
+                    "overpromise that leads a family to commit is worse than a "
+                    "lost lead",
                 )
             ]
         return []

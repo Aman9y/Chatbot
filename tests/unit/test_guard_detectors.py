@@ -169,3 +169,47 @@ def test_premium_country_ignores_the_pronoun_us():
     assert detectors.premium_country_mentioned("let us set up a call", prem) is None
     assert detectors.premium_country_mentioned("US universities", prem) == "US"
     assert detectors.premium_country_mentioned("cost in the usa", prem) == "USA"
+
+
+# --- overpromise / overselling (review notes §3) ----------------------
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Honestly FMGE is easy, you'll clear it first try",
+        "the FMGE is not that hard really",
+        "the screening exam is basically a formality",
+        "admission is basically a formality once you apply",
+        "your seat is as good as done with that score",
+        "you'll definitely get in",
+        "you're sure to get in with those marks",
+        "there's no real risk here",
+        "nothing can go wrong with this plan",
+        "Georgia is 100% safe",
+        "you'll be completely fine there",
+        "you're guaranteed to become a doctor",
+        "guaranteed career once you finish",
+        "it's a risk-free route",
+        "you have nothing to lose",
+    ],
+)
+def test_find_overpromise_positive(text):
+    assert detectors.find_overpromise(text), text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "FMGE is more manageable than most people assume with the right university",
+        "many students clear the FMGE after a year of prep",
+        "it's often safer than students expect, though it varies by city",
+        "you'll get admission support from our team throughout",
+        "the campus is secure and has a warden",
+        "safety varies by city and university",
+        "the counsellor will assess your case and give a realistic read",
+        "the FMGE is a real exam that needs preparation",
+        "FMGE is hard but very doable with the right college",
+        "there's a risk of delays if documents are late",
+    ],
+)
+def test_find_overpromise_negative(text):
+    assert not detectors.find_overpromise(text), text

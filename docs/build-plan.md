@@ -52,6 +52,15 @@ instructions inside its prompt.
   severity tier as the financing and admission-guarantee rules above; enforced
   as a deterministic (Tier-1) Response Guard block, not prompt-only.
   (Rule 7, added 2026-09-08 — surfaced by topic-matrix-2 §9.)
+- Never overpromise. Separate from "no guarantees": the bot must not call a real
+  difficulty easy — admission is not "a formality", the FMGE is not "easy" or
+  "nothing to worry about", no outcome is "guaranteed", there is no "no risk" or
+  "100% safe". Honest reassurance ("more manageable than most assume", "safer
+  than students expect", "many students clear it") is fine; a promise of the
+  outcome or a claim that something hard is trivial is not. Enforced as a
+  Tier-1 Response Guard block (`overpromise`). The per-country cost ranges also
+  gained `blended_cost_range` — a range span matching no approved country is
+  blocked as an invented figure. (Rule 8, added 2026-09-10 — review notes §§1,3.)
 - No sales/qualification conversation runs until the lead passes a conversational
   gate: (1) a plain opt-in ask, interpreted by the LLM/NLU layer (not string
   matching) as yes / no / unclear; (2) an age check → 18+ / under-18 / unclear.
