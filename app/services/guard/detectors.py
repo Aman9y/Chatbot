@@ -224,13 +224,35 @@ _CONFIRMED_SEAT = re.compile(
 )
 
 
+# A guarantee word is a VIOLATION only when it's an assertion. An honest denial —
+# "admission is never guaranteed", "no consultancy can guarantee a seat",
+# "hum guarantee nahi de sakte" — must pass through, not get blocked and swapped
+# for the fallback. Negators are checked just before the match (English: "no /
+# not / never / cannot / can't / without / nobody can …") and just after it
+# (Hindi is verb-final: "guarantee nahi …").
+_GUARANTEE_NEG_BEFORE = re.compile(
+    r"\b(no|not|never|without|cannot|can'?t|cant|won'?t|wont|would ?n'?t|do ?n'?t"
+    r"|dont|does ?n'?t|is ?n'?t|are ?n'?t|was ?n'?t|nobody|no[- ]?one|none|nothing"
+    r"|zero|neither|nor|hardly)\b|n'?t\b",
+    re.IGNORECASE,
+)
+_GUARANTEE_NEG_AFTER = re.compile(r"^\W{0,4}(nahi+n?|not\b)", re.IGNORECASE)
+
+
+def _guarantee_negated(text: str, start: int, end: int) -> bool:
+    before = text[max(0, start - 32):start]
+    after = text[end:end + 22]
+    return bool(_GUARANTEE_NEG_BEFORE.search(before) or _GUARANTEE_NEG_AFTER.search(after))
+
+
 def find_guarantees(text: str) -> list[str]:
     hits: list[str] = []
     for m in _CONFIRMED_SEAT.finditer(text):
-        hits.append(m.group(0))
+        if not _guarantee_negated(text, m.start(), m.end()):
+            hits.append(m.group(0))
     for m in _GUARANTEE_TERM.finditer(text):
         window = text[max(0, m.start() - 50) : m.end() + 50]
-        if _OUTCOME_WORD.search(window):
+        if _OUTCOME_WORD.search(window) and not _guarantee_negated(text, m.start(), m.end()):
             hits.append(m.group(0))
     seen: list[str] = []
     for h in hits:

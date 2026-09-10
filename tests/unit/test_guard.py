@@ -59,6 +59,16 @@ def test_guarantee_blocked(guard, ctx):
     assert "admission_guarantee" in v.rules
 
 
+def test_honest_guarantee_denial_passes_the_guard(guard, ctx):
+    # a correct denial must NOT be blocked-and-swapped for the fallback
+    v = guard.check(
+        "No consultancy can guarantee admission before seeing your profile — "
+        "Rafique Sir will give you an honest read on a call.",
+        context=ctx,
+    )
+    assert v.allowed, v.rules
+
+
 def test_length_blocked(guard, ctx):
     v = guard.check("This is a very wordy reply. " * 20, context=ctx)
     assert not v.allowed

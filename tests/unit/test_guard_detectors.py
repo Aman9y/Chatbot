@@ -96,10 +96,34 @@ def test_find_guarantees_positive(text):
         "the counsellor will assess your case",
         "many students get admission each year",
         "typically students clear the exam",
+        # honest denials must pass through, not get blocked -> fallback
+        "Admission is never guaranteed just by paying a deposit.",
+        "No honest consultancy can guarantee admission before seeing your profile.",
+        "We can't guarantee a seat — it depends on your NEET score.",
+        "There is no guarantee of admission at any specific university.",
+        "Nobody can promise you a confirmed seat.",
+        "I won't promise you admission.",
+        "Your admission is not confirmed until the university issues the letter.",
+        # Hindi denial (verb-final negation)
+        "hum guarantee nahi de sakte ki aapko seat milegi",
+        "admission guaranteed nahi hoti, ye score par depend karta hai",
     ],
 )
 def test_find_guarantees_negative(text):
     assert not detectors.find_guarantees(text), text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "100% guaranteed admission, no doubt about it.",
+        "Your admission is guaranteed if you book now.",
+        "Once you pay the deposit your seat is confirmed.",
+        "aapko admission guaranteed milega, bilkul pakka",  # Hindi assertion
+    ],
+)
+def test_find_guarantees_still_blocks_real_assertions(text):
+    assert detectors.find_guarantees(text), text
 
 
 def test_pg_cost_only_fires_with_figure():

@@ -70,3 +70,48 @@ def test_missing_phone_config_degrades_gracefully():
     msg = safe_fallback_message(s, plan=_plan(["premium_cost_disclosure"], deflect_index=2))
     assert "{phone}" not in msg
     assert msg  # non-empty
+
+
+# --- language-aware fallback (round-4 caveat fix 2) --------------------
+def test_is_hindi_detection():
+    from app.services.guard.fallback import is_hindi
+
+    assert is_hindi("kya aap guarantee dete ho admission ki")
+    assert is_hindi("हम guarantee नहीं दे सकते")
+    assert is_hindi("mera beta bahar padhega, kitna kharcha aayega")
+    assert not is_hindi("will Rafique Sir call me back to explain the process")
+    assert not is_hindi("How much does MBBS in Georgia cost, and is it NMC recognised")
+    assert not is_hindi("ok so what is the next step then")
+
+
+def test_hindi_conversation_gets_a_hindi_fallback():
+    plan = _plan(["admission_guarantee"])  # -> mode 12
+    convo = "kya aap guarantee dete ho admission ki, mera beta MBBS karna chahta hai"
+    hi = safe_fallback_message(_S, plan=plan, conversation_text=convo)
+    en = safe_fallback_message(_S, plan=plan, conversation_text="is admission guaranteed")
+    assert "keh sakti" in hi or "samjha denge" in hi  # unmistakably Hindi
+    assert hi != en
+    assert "I'm not going to" not in hi
+    assert "Rafique Shaikh" in hi
+
+
+def test_hindi_fallback_never_leaves_a_stray_template_token():
+    for rules in (["financing_mention"], ["admission_guarantee"], ["multi_country_cost"],
+                  ["overpromise"], ["cost_missing_inclusion"]):
+        plan = _plan(rules)
+        msg = safe_fallback_message(
+            _S, plan=plan, conversation_text="kya iske liye loan mil sakta hai humein bataiye"
+        )
+        assert "{" not in msg and "}" not in msg
+        # no dangling postposition from a stripped {phone}
+        assert " par call" not in msg or "+91" in msg
+        assert "Shaikh par " not in msg
+
+
+def test_hindi_nurture_fallback_is_hindi():
+    msg = safe_fallback_message(
+        _S, engagement_phase="nurture",
+        conversation_text="theek hai main baad mein aur baat karungi aapse",
+    )
+    assert "Rafique Shaikh" in msg
+    assert any(w in msg for w in ("Jab", "jaldi", "seedhe"))

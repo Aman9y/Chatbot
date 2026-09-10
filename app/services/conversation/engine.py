@@ -844,6 +844,11 @@ class ConversationEngine:
                 engagement_phase=turn.engagement_phase,
                 plan=fallback_plan,
                 prior_bot_text=turn.guard_context.prior_bot_text,
+                conversation_text=(
+                    turn.guard_context.conversation_text
+                    + " "
+                    + turn.guard_context.lead_message
+                ),
             ),
             verdict,
             True,
