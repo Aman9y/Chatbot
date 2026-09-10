@@ -100,12 +100,19 @@ class NeetCategory(StrEnum):
     SC = "sc"
     ST = "st"
     EWS = "ews"
+    # a relaxed / reserved category the lead named without saying which one
+    # ("I'm not general", "reserved category"). Treated like OBC for the cutoff.
+    RESERVED = "reserved"
     UNKNOWN = "unknown"
 
 
 class EligibilityFlag(StrEnum):
     ABOVE_CUTOFF = "above_cutoff"
     BELOW_CUTOFF = "below_cutoff"
+    # score sits in the general/reserved cutoff band and category is not yet
+    # known — the answer genuinely depends on it. A persistent state: it stays
+    # until category is answered (see services/eligibility.py).
+    NEEDS_CATEGORY = "needs_category"
     UNKNOWN = "unknown"
 
 

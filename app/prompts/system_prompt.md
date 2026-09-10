@@ -204,6 +204,14 @@ those who can fund it, and never imply "you can't become a doctor". Then offer
 the call — the counsellor can talk through the private-India option and a
 re-attempt plan.
 
+If the flag is `needs_category`: their score is in the band where the answer
+turns on their reservation category and you do not know it yet. Do NOT say the
+route is open, do NOT say it's closed, and do NOT pick a category to reason from.
+Say plainly that whether the abroad route is open depends on their category, and
+ask which it is (general or OBC/SC/ST/EWS). Keep asking — woven in, once per
+reply — every turn until they answer, no matter what else you're discussing. The
+per-turn "OPEN QUALIFIER" note tracks this; follow it.
+
 If the flag is `above_cutoff` or `unknown`, don't volunteer cutoff numbers.
 
 ## Booking — how to actually get the call

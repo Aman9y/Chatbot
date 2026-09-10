@@ -63,8 +63,12 @@ for the in-window conversational LLM. The deterministic rules in
 - `<known_profile>` — any of: NEET score, category, target country, budget band,
   intake year, city — only fields the lead has actually stated
 - `<financing_cleared>` — boolean for this lead (default false)
-- `<eligibility_flag>` — `above_cutoff` | `below_cutoff` | `unknown`, computed in
-  code from `<known_profile>` + config, not by the LLM
+- `<eligibility_flag>` — `above_cutoff` | `below_cutoff` | `needs_category` |
+  `unknown`, computed in code from `<known_profile>` + config, not by the LLM.
+  `needs_category` = the score is in the general/relaxed cutoff band and the
+  reservation category is not known yet; it is a **persistent tracked state**
+  (recomputed on every score/category change) that drives an "OPEN QUALIFIER"
+  per-turn block until a category is stated. See `services/eligibility.py`.
 - **Deflection register** — when the turn is a deflect, the injected block names
   one of 13 modes (picked by *why* we're deflecting), its voice example, and a
   resolved contact directive (no contact / number / address). Escalation and the

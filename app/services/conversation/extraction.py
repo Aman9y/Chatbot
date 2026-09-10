@@ -22,6 +22,10 @@ from app.services.eligibility import compute_eligibility
 from app.services.llm.base import LLMClient, LLMMessage
 from app.services.timeutils import utcnow
 
+_SPECIFIC_RELAXED = frozenset(
+    {NeetCategory.OBC, NeetCategory.SC, NeetCategory.ST, NeetCategory.EWS}
+)
+
 # NEET UG is out of 720. A stated score is realistically 1..720.
 _NEET_MAX = 720
 
@@ -37,9 +41,42 @@ _CUTOFF_CUE = re.compile(
 )
 _NUMBER = re.compile(r"(?<![\d.])(\d{1,3})(?![\d.])")
 
-_CATEGORY = re.compile(
-    r"\b(general|gen(?:eral)?\s+category|unreserved|open category|obc(?:[- ]ncl)?|"
-    r"\bsc\b|\bst\b|\bews\b)\b",
+# Someone else's score, not the lead's — don't record it as theirs. NB: "son /
+# daughter / child / beta / beti" are deliberately NOT here (a parent stating
+# their child's score IS the qualifying score).
+_THIRD_PARTY = re.compile(
+    r"\b(friend|friends|friend'?s|cousin|cousin'?s|brother|sister|sibling|"
+    r"classmate|batchmate|roommate|senior|junior|neighbou?r|"
+    r"someone|somebody|some ?one|anyone|another (?:student|guy|girl|kid)|"
+    r"dost|bhai|behen|yaar)\b",
+    re.IGNORECASE,
+)
+
+# Category, in many phrasings. Ordered so specific tokens win over "reserved".
+_CATEGORY_SPECIFIC = re.compile(
+    r"(?<![a-z])("
+    r"obc(?:[- ]?ncl)?|o\.?b\.?c\.?|other backward|"
+    r"sc\b|s\.?c\.?|scheduled[- ]?caste|dalit|"
+    r"st\b|s\.?t\.?|scheduled[- ]?tribe|adivasi|tribal|"
+    r"ews|e\.?w\.?s\.?|economically weaker"
+    r")(?![a-z])",
+    re.IGNORECASE,
+)
+_CATEGORY_GENERAL = re.compile(
+    r"(?<![a-z])("
+    r"gen(?:eral)?(?:[- ]category)?|unreserved|un[- ]reserved|open(?:[- ]category)?|"
+    r"samanya|no reservation|not reserved|non[- ]reserved|general merit"
+    r")(?![a-z])",
+    re.IGNORECASE,
+)
+# "reserved category", "I'm not general", "aarakshit", "quota", "SC/ST" (which
+# of the relaxed ones is unstated). "not reserved" is NOT here — that's GENERAL.
+_CATEGORY_RESERVED = re.compile(
+    r"(?<![a-z])("
+    r"(?<!not )(?<!non )reserved(?:[- ]category)?|aarakshit|arakshit|quota category|"
+    r"(?:i'?m |i am |we'?re |belong to )?(?:not|non)[- ]?general|"
+    r"sc[/ -]?st|st[/ -]?sc"
+    r")(?![a-z])",
     re.IGNORECASE,
 )
 
@@ -121,6 +158,9 @@ class QualifierExtraction:
         )
 
 
+_LEAD_CUE_NEAR = re.compile(r"\b(i|maine|main ne|mera|meri|hum ?ne|humne)\b", re.IGNORECASE)
+
+
 def _heuristic_score(text: str) -> int | None:
     if not _SCORE_CUE.search(text):
         return None
@@ -128,9 +168,14 @@ def _heuristic_score(text: str) -> int | None:
         val = int(m.group(1))
         if not (1 <= val <= _NEET_MAX):
             continue
-        window = text[max(0, m.start() - 25) : m.end() + 25]
+        window = text[max(0, m.start() - 35) : m.end() + 25]
+        near = text[max(0, m.start() - 16) : m.start()]  # the clause right before
         if _CUTOFF_CUE.search(window):
             continue  # they're asking about the cutoff, not stating their score
+        if _THIRD_PARTY.search(near):
+            continue  # "my friend got 180"
+        if _THIRD_PARTY.search(window) and not _LEAD_CUE_NEAR.search(near):
+            continue  # a friend was named and this number isn't clearly the lead's
         if val < 50 and not re.search(r"\b(scored?|got|marks?|neet)\b", window, re.IGNORECASE):
             continue
         return val
@@ -138,20 +183,35 @@ def _heuristic_score(text: str) -> int | None:
 
 
 def _heuristic_category(text: str) -> NeetCategory | None:
-    m = _CATEGORY.search(text)
-    if not m:
-        return None
-    token = re.sub(r"\s+", " ", m.group(0).lower()).strip()
-    if token.startswith(("general", "gen", "unreserved", "open")):
+    # "SC/ST", "SC or ST" etc. → a relaxed category, but which is unstated.
+    if re.search(r"(?<![a-z])(sc[/ -]?st|st[/ -]?sc|sc or st|st or sc)(?![a-z])", text, re.I):
+        return NeetCategory.RESERVED
+    m = _CATEGORY_SPECIFIC.search(text)
+    if m:
+        tok = re.sub(r"[^a-z]", "", m.group(1).lower())
+        # distinctive words first — "scheduledtribe" also startswith "sc"
+        if "tribe" in tok or tok in ("adivasi", "tribal"):
+            return NeetCategory.ST
+        if "caste" in tok or tok == "dalit":
+            return NeetCategory.SC
+        if "backward" in tok:
+            return NeetCategory.OBC
+        if "weaker" in tok:
+            return NeetCategory.EWS
+        if tok.startswith("obc"):
+            return NeetCategory.OBC
+        if tok.startswith("ews"):
+            return NeetCategory.EWS
+        if tok in ("sc", "scc"):  # "sc", "s.c."
+            return NeetCategory.SC
+        if tok in ("st", "stt"):
+            return NeetCategory.ST
+    # RESERVED is checked before GENERAL so "not general" / "non-general" don't
+    # read as GENERAL.
+    if _CATEGORY_RESERVED.search(text):
+        return NeetCategory.RESERVED
+    if _CATEGORY_GENERAL.search(text):
         return NeetCategory.GENERAL
-    if token.startswith("obc"):
-        return NeetCategory.OBC
-    if token == "sc":
-        return NeetCategory.SC
-    if token == "st":
-        return NeetCategory.ST
-    if token == "ews":
-        return NeetCategory.EWS
     return None
 
 
@@ -217,11 +277,17 @@ _LLM_SYSTEM = (
     "messages. Return ONLY facts the lead actually stated about THEMSELVES / their "
     "child — never guesses, never the bot's numbers. Reply as compact JSON with any "
     "of these keys you are sure about (omit the rest): "
-    '{"neet_score": <int 1-720>, "neet_category": "general|obc|sc|st|ews", '
+    '{"neet_score": <int 1-720>, '
+    '"neet_category": "general|obc|sc|st|ews|reserved", '
     '"city": "<city or state>", "target_country": "<country>", '
     '"budget_band": "tight|flexible|stated ~<amount>", '
     '"intake_year": <int>, "urgency": "this_intake|next_intake|undecided", '
-    '"parent_in_loop": true}'
+    '"parent_in_loop": true}. '
+    "If they correct or restate their score, report the corrected number. "
+    "neet_category: 'general' for general/unreserved/open; the specific one if "
+    "named (obc/sc/st/ews); 'reserved' if they say they are a reserved / "
+    "non-general / quota category without saying which. A score for a friend or "
+    "sibling is NOT the lead's — omit it."
 )
 
 
@@ -304,13 +370,25 @@ def apply_to_lead(
             setattr(lead, attr, value)
             changed[attr] = value
 
-    _fill_if_empty("neet_score", extraction.neet_score)
-    if extraction.neet_category is not None and lead.neet_category in (
-        None,
-        NeetCategory.UNKNOWN,
-    ):
-        lead.neet_category = extraction.neet_category
-        changed["neet_category"] = extraction.neet_category.value
+    # NEET score: last-stated-wins. The extractor only produces a score the lead
+    # stated about themselves (first-person cue, third-party cue filtered), so a
+    # later restatement ("actually I got 210, not 200") should take effect and
+    # re-drive eligibility.
+    _update("neet_score", extraction.neet_score)
+
+    # NEET category: last-stated-wins, but don't overwrite a specific relaxed
+    # category (OBC/SC/ST/EWS) with the generic RESERVED — that's less
+    # information, not a correction.
+    new_cat = extraction.neet_category
+    if new_cat is not None and new_cat is not lead.neet_category:
+        downgrade = (
+            new_cat is NeetCategory.RESERVED
+            and lead.neet_category in _SPECIFIC_RELAXED
+        )
+        if not downgrade:
+            lead.neet_category = new_cat
+            changed["neet_category"] = new_cat.value
+
     _fill_if_empty("city", extraction.city)
     _fill_if_empty("intake_year", extraction.intake_year)
     _update("target_country", extraction.target_country)
@@ -322,11 +400,13 @@ def apply_to_lead(
         lead.parent_in_loop = True
         changed["parent_in_loop"] = True
 
-    if {"neet_score", "neet_category"} & changed.keys():
-        new_flag = compute_eligibility(lead.neet_score, lead.neet_category, settings)
-        if new_flag != lead.eligibility_flag:
-            lead.eligibility_flag = new_flag
-            changed["eligibility_flag"] = new_flag.value
+    # Eligibility is a pure function of (score, category, cutoffs). Recompute it
+    # unconditionally so it can never drift from its inputs and so statement
+    # order never matters. NEEDS_CATEGORY persists here until a category lands.
+    new_flag = compute_eligibility(lead.neet_score, lead.neet_category, settings)
+    if new_flag != lead.eligibility_flag:
+        lead.eligibility_flag = new_flag
+        changed["eligibility_flag"] = new_flag.value
 
     if changed:
         lead.qualifiers_updated_at = utcnow()

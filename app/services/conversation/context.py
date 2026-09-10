@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.models.conversation_trace import ConversationTrace
-from app.models.enums import MessageDirection, MessageType, RoleHint
+from app.models.enums import (
+    EligibilityFlag,
+    MessageDirection,
+    MessageType,
+    RoleHint,
+)
 from app.models.lead import Lead
 from app.models.message import Message
 from app.services.conversation.deflection import DeflectionPlan, select_deflection, turn_hint
@@ -224,6 +229,7 @@ async def build_turn_context(
         f"known_profile: {profile}\n"
         f"financing_cleared: {financing}\n"
         f"{_pace_block(pace_plan)}"
+        f"{_eligibility_block(lead)}"
         f"{_topic_block(topic_match)}"
         f"{_objection_block(objection)}"
         f"{_deflection_block(deflection, settings)}"
@@ -328,6 +334,29 @@ def _objection_block(o: Objection | None) -> str:
         "\n## Objection detected (sales-playbook Part 5)\n"
         f"type: {o.id}\n"
         f"handle_like_this: {o.script_hint}\n"
+    )
+
+
+def _eligibility_block(lead: Lead) -> str:
+    """A persistent open item while the lead's NEET score sits in the band where
+    the answer depends on their category. Driven by the tracked
+    ``lead.eligibility_flag`` state, so it resurfaces every turn — however many
+    other topics come and go — until a category is actually stated."""
+
+    if lead.eligibility_flag is not EligibilityFlag.NEEDS_CATEGORY:
+        return ""
+    return (
+        "\n## OPEN QUALIFIER — must resolve, do not drop\n"
+        f"The lead's NEET score ({lead.neet_score}) sits in the band where whether "
+        "the government/abroad route is open depends on their reservation category "
+        "(general vs OBC/SC/ST/EWS). You do NOT know it yet.\n"
+        "- Do NOT tell them the route is open OR closed, and do NOT assume a "
+        "category to reason from — not this turn, not later.\n"
+        "- After answering whatever they actually asked, weave in ONE short, "
+        "natural ask for their category (\"quick one — are you general category "
+        "or OBC/SC/ST/EWS?\"). Ask it plainly, once per reply.\n"
+        "- This stays open across every other topic (country, budget, safety, "
+        "FMGE…) until they answer. Don't badger, but don't let it drop.\n"
     )
 
 
