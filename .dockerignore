@@ -13,4 +13,3 @@ __pycache__/
 !.env.example
 docs/
 tests/
-README.md
