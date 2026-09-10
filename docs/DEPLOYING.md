@@ -86,6 +86,12 @@ These block a real launch and are not code:
 - **Postgres**: create the `chatbot` role + DB; `CREATE EXTENSION IF NOT EXISTS
   vector;` (pgvector isn't used until the Phase 8 RAG KB, enable it anyway).
   Listen on `localhost` only.
+- **`DATABASE_URL` scheme**: the app needs an async driver, but you can hand it
+  the plain URL a PaaS injects. `config.py` normalises `postgres://`,
+  `postgresql://`, `postgresql+psycopg2://` and `postgresql+psycopg://` to
+  `postgresql+asyncpg://` automatically, strips libpq-only query params
+  (`sslmode`, `channel_binding`, …) and maps `sslmode=require` → `?ssl=true`.
+  Setting the URL already in `postgresql+asyncpg://…` form also works.
 - **Redis**: bind `127.0.0.1`, set `requirepass`, `appendonly yes`. Put the
   password in `REDIS_URL` / `CELERY_BROKER_URL`.
 - Migrate once: `python -m alembic upgrade head` (or let the Docker `app`

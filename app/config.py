@@ -239,6 +239,45 @@ class Settings(BaseSettings):
     # Default per-lead financing disclosure state (plan §2: default is "do not mention").
     financing_cleared_default: bool = False
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalise_database_url(cls, v: object) -> object:
+        """Accept the plain URLs that hosts (Railway, Render, Heroku, Fly) inject
+        and coerce them to the async drivers SQLAlchemy needs. Without this a
+        ``postgresql://…`` DATABASE_URL loads the sync psycopg2 dialect and
+        ``create_async_engine`` raises "the asyncio extension requires an async
+        driver". Idempotent — an already-correct URL is returned unchanged.
+        """
+        if not isinstance(v, str) or not v.strip():
+            return v
+        url = v.strip()
+        # scheme swaps: postgres:// (legacy), postgresql://, +psycopg2, +psycopg
+        for prefix in (
+            "postgres://",
+            "postgresql://",
+            "postgresql+psycopg2://",
+            "postgresql+psycopg://",
+        ):
+            if url.startswith(prefix):
+                url = "postgresql+asyncpg://" + url[len(prefix):]
+                break
+        if url.startswith("sqlite://") and "+aiosqlite" not in url:
+            url = url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+        # asyncpg rejects libpq-only query params. sslmode=require|verify-* ->
+        # ask SQLAlchemy's asyncpg dialect for TLS via ?ssl=true instead.
+        if url.startswith("postgresql+asyncpg://") and "sslmode=" in url:
+            import re as _re
+
+            want_ssl = bool(
+                _re.search(r"sslmode=(require|verify-ca|verify-full|prefer|allow)", url)
+            )
+            url = _re.sub(r"([?&])sslmode=[^&]*", r"\1", url)
+            url = _re.sub(r"[?&](channel_binding|gssencmode|target_session_attrs)=[^&]*", "", url)
+            url = url.replace("?&", "?").replace("&&", "&").rstrip("?&")
+            if want_ssl and "ssl=" not in url:
+                url += ("&" if "?" in url else "?") + "ssl=true"
+        return url
+
     @field_validator("minor_default_policy", mode="before")
     @classmethod
     def _blank_policy_to_default(cls, v: object) -> object:
