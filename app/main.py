@@ -74,9 +74,15 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(webhook_router)
     # Local WhatsApp-lookalike demo (app/api/routes_demo.py) — separate from the
-    # real Meta webhook flow above; gated behind DEMO_ENABLED at request time.
+    # real Meta webhook flow above. The router itself gates every request
+    # behind DEMO_ENABLED, but the static mount below is evaluated eagerly at
+    # import time (StaticFiles(directory=...) raises RuntimeError if the
+    # directory doesn't exist), so it must not run at all unless the demo is
+    # enabled — a deployed image with DEMO_ENABLED unset has no demo/
+    # directory and must not try to mount it.
     app.include_router(demo_router)
-    app.mount("/demo/static", StaticFiles(directory=DEMO_STATIC_DIR), name="demo_static")
+    if get_settings().demo_enabled:
+        app.mount("/demo/static", StaticFiles(directory=DEMO_STATIC_DIR), name="demo_static")
     return app
 
 

@@ -13,6 +13,10 @@ RUN pip install --upgrade pip && pip install .
 
 COPY alembic.ini ./
 COPY alembic ./alembic
+# Static assets for the local demo UI (app/api/routes_demo.py). Only ever
+# served when DEMO_ENABLED=true; harmless to ship otherwise, but must exist so
+# that flipping the flag on a deployed image doesn't 500 for a missing dir.
+COPY demo ./demo
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
