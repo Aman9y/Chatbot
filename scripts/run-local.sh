@@ -62,4 +62,7 @@ echo "-------------------------------------------------------------------"
 # --- app (foreground) ----------------------------------------------
 echo "app    : http://127.0.0.1:8000   (Ctrl+C to stop everything)"
 echo "         /readyz  /webhook/whatsapp"
+if grep -q '^DEMO_ENABLED=true' .env 2>/dev/null; then
+  echo "         /demo    (WhatsApp-lookalike demo UI, real engine, no Meta)"
+fi
 exec "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload

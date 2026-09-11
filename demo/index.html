@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stellar AI — Local Demo</title>
+<link rel="stylesheet" href="/demo/static/style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Sidebar: exactly one contact -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="me-avatar" aria-hidden="true">
+        <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" fill="#2a3942"/><circle cx="24" cy="19" r="8" fill="#8696a0"/><path d="M8 40c2-9 10-14 16-14s14 5 16 14" fill="#8696a0"/></svg>
+      </div>
+      <div class="sidebar-title">Chats</div>
+      <button id="resetBtn" class="icon-btn" title="Start a new demo conversation">⟳</button>
+    </div>
+
+    <div class="contact-list">
+      <div class="contact-row active">
+        <div class="avatar" aria-hidden="true">
+          <svg viewBox="0 0 48 48">
+            <circle cx="24" cy="24" r="24" fill="#00a884"/>
+            <text x="24" y="30" text-anchor="middle" font-size="18" font-family="Segoe UI, Arial" fill="#0b141a" font-weight="600">SA</text>
+          </svg>
+        </div>
+        <div class="contact-meta">
+          <div class="contact-line1">
+            <span class="contact-name">Stellar AI</span>
+            <span class="contact-time" id="lastMsgTime"></span>
+          </div>
+          <div class="contact-line2">
+            <span class="contact-status-dot" aria-hidden="true"></span>
+            <span id="contactPreview">online</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <span>Local demo — not connected to WhatsApp</span>
+      <span id="demoPhoneLabel" class="demo-phone"></span>
+    </div>
+  </aside>
+
+  <!-- Main chat panel -->
+  <main class="chat">
+    <header class="chat-header">
+      <div class="avatar" aria-hidden="true">
+        <svg viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="24" fill="#00a884"/>
+          <text x="24" y="30" text-anchor="middle" font-size="18" font-family="Segoe UI, Arial" fill="#0b141a" font-weight="600">SA</text>
+        </svg>
+      </div>
+      <div class="chat-header-meta">
+        <div class="chat-header-name">Stellar AI</div>
+        <div class="chat-header-status">online</div>
+      </div>
+    </header>
+
+    <div class="chat-scroll" id="chatScroll">
+      <div class="chat-bg"></div>
+      <div class="messages" id="messages">
+        <div class="day-chip"><span>Today</span></div>
+        <div class="empty-hint" id="emptyHint">Send a message below to start the demo conversation with Stellar AI.</div>
+      </div>
+    </div>
+
+    <form class="composer" id="composerForm">
+      <textarea
+        id="messageInput"
+        class="composer-input"
+        placeholder="Type a message"
+        rows="1"
+        autocomplete="off"
+        maxlength="2000"
+      ></textarea>
+      <button type="submit" id="sendBtn" class="send-btn" title="Send" aria-label="Send">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </form>
+  </main>
+
+</div>
+
+<script src="/demo/static/app.js"></script>
+</body>
+</html>

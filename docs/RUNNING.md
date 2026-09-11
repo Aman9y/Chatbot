@@ -75,6 +75,25 @@ A fresh lead lands in the **consent + age gate** (`gate: pending_age`) and gets
 the opt-in / "are you 18+?" questions before any sales reply. Answer with an
 adult age and the sales flow (and the LLM) kick in.
 
+### WhatsApp-lookalike demo UI
+
+For showing people the bot without touching WhatsApp at all: set
+`DEMO_ENABLED=true` in `.env` (already on if you copied a recent
+`.env.example`), start the app as above, and open
+**http://127.0.0.1:8000/demo** in a browser. It's a small dark-themed chat page
+styled after the WhatsApp desktop app — one contact ("Stellar AI"), green
+outgoing / gray incoming bubbles, a typing indicator held up for exactly as
+long as the real API call takes. Every message goes through `POST /demo/chat`
+(`app/api/routes_demo.py`) into the **real** `ConversationEngine` — same guard,
+KB and LLM call a WhatsApp message would get, with the consent/age gate
+skipped (like `simulate`). Each browser gets its own demo phone number
+(persisted in `localStorage`, so reloading keeps the same lead / conversation
+state); the ⟳ button in the sidebar starts a fresh one.
+
+`DEMO_ENABLED` defaults to `false`, and the endpoint additionally refuses to
+run unless `WHATSAPP_CLIENT=fake` — leave both as the local-dev defaults and
+never turn `DEMO_ENABLED` on for a deployed instance.
+
 ### Stop / reset
 
 ```bash

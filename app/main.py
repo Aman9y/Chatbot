@@ -4,10 +4,13 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as redis_asyncio
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.api.errors import register_exception_handlers
 from app.api.middleware import RequestContextMiddleware
+from app.api.routes_demo import STATIC_DIR as DEMO_STATIC_DIR
+from app.api.routes_demo import router as demo_router
 from app.api.routes_health import router as health_router
 from app.api.routes_webhook import router as webhook_router
 from app.config import get_settings
@@ -70,6 +73,10 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(webhook_router)
+    # Local WhatsApp-lookalike demo (app/api/routes_demo.py) — separate from the
+    # real Meta webhook flow above; gated behind DEMO_ENABLED at request time.
+    app.include_router(demo_router)
+    app.mount("/demo/static", StaticFiles(directory=DEMO_STATIC_DIR), name="demo_static")
     return app
 
 

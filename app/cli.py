@@ -88,6 +88,8 @@ def check_config() -> None:
     typer.echo(f"guard_enabled         : {settings.guard_enabled}")
     typer.echo(f"guard_regenerate_attempts : {settings.guard_regenerate_attempts}")
     typer.echo(f"kb_path               : {settings.kb_path}")
+    if settings.demo_enabled:
+        typer.echo("demo_enabled          : True  (http://127.0.0.1:8000/demo)")
     typer.echo("")
     unresolved = settings.unresolved_phase1_items
     if not unresolved:

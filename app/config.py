@@ -147,6 +147,15 @@ class Settings(BaseSettings):
     kb_path: str = "app/knowledge/kb.yaml"
     kb_retrieval_k: int = 4
 
+    # --- local demo UI (app/api/routes_demo.py) ---------------------------
+    # A WhatsApp-lookalike page for showing people the bot, wired to the real
+    # engine/guard/KB/LLM but with the consent+age gate skipped (like `leadbot
+    # simulate`). OFF by default — this is a local-demo convenience, not
+    # something to expose on a deployed instance. Even when on, the route
+    # refuses to run unless whatsapp_client=fake, so a demo build can never
+    # send a real WhatsApp message.
+    demo_enabled: bool = False
+
     # --- consent + age gate (build-plan §2 / DPDP) -----------------------
     # Master switch. When false the engine treats every lead as gate-cleared
     # (the pre-gate behaviour).
