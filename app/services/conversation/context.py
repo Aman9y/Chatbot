@@ -28,6 +28,7 @@ from app.services.conversation.triage import (
     classify_topic,
     detect_objection,
 )
+from app.services.guard import detectors
 from app.services.guard.guard import GuardContext
 from app.services.knowledge.base import KBChunk, KnowledgeBase
 from app.services.llm.base import LLMMessage
@@ -206,6 +207,22 @@ async def build_turn_context(
     prior_user_texts = [m.content for m in llm_messages[:-1] if m.role == "user"]
     prior_bot_texts = [m.content for m in llm_messages if m.role == "assistant"]
 
+    # Enforced state (director review), not a prompt hint: a real country
+    # back-and-forth has happened once BOTH sides have actually named an
+    # approved country somewhere in this conversation — the lead raising one
+    # and the bot responding with one. Sticky: only ever flips false -> true,
+    # recomputed from the real history every turn so it can never depend on a
+    # prompt instruction being followed. The Response Guard enforces it (see
+    # app/services/guard/guard.py:_check_premature_contact_offer).
+    if not lead.country_discussed:
+        approved_countries = list(settings.country_cost_bounds)
+        lead_side = " ".join((*prior_user_texts, latest_text))
+        bot_side = "\n".join(prior_bot_texts)
+        if detectors.countries_named(lead_side, approved_countries) and detectors.countries_named(
+            bot_side, approved_countries
+        ):
+            lead.country_discussed = True
+
     # Engagement signal (director review): the number should surface on genuine
     # engagement — a real question or follow-through, not a fixed message count.
     # A turn counts as substantive if it matched a real topic (not just small
@@ -244,6 +261,7 @@ async def build_turn_context(
         f"known_profile: {profile}\n"
         f"financing_cleared: {financing}\n"
         f"{_pace_block(pace_plan)}"
+        f"{_country_gate_block(lead)}"
         f"{_eligibility_block(lead)}"
         f"{_discovery_block(lead, message_depth)}"
         f"{_topic_block(topic_match)}"
@@ -267,6 +285,15 @@ async def build_turn_context(
         premium_countries=settings.premium_cost_country_list,
         sensitive_countries=settings.sensitive_cost_country_list,
         counselor_phone=settings.counselor_phone,
+        counselor_name=settings.counselor_name,
+        office_address=settings.office_address,
+        # Below-cutoff leads have no country left to pick — their path is the
+        # private-India / re-attempt conversation, and offering the call is
+        # the honest next step regardless of country, so the gate doesn't
+        # apply to them.
+        country_discussed=(
+            lead.country_discussed or lead.eligibility_flag is EligibilityFlag.BELOW_CUTOFF
+        ),
     )
 
     return TurnContext(
@@ -352,6 +379,29 @@ def _objection_block(o: Objection | None) -> str:
         "\n## Objection detected (sales-playbook Part 5)\n"
         f"type: {o.id}\n"
         f"handle_like_this: {o.script_hint}\n"
+    )
+
+
+def _country_gate_block(lead: Lead) -> str:
+    """Enforced state (director review), not a prompt hint: the guard actually
+    blocks a draft that mentions the call / director's number / office while
+    ``lead.country_discussed`` is false (see
+    app/services/guard/guard.py:_check_premature_contact_offer). This note is
+    just the heads-up so the model doesn't waste a regeneration finding that
+    out — the real enforcement does not depend on this text being followed.
+    """
+
+    if lead.country_discussed:
+        return ""
+    return (
+        "\n## GATE — no call, number, or office yet (enforced, not optional)\n"
+        "You have not yet had a real back-and-forth about a specific country "
+        "with this lead — the guard will block any mention of a call, "
+        "Rafique Sir's number, or the office until that happens, even if the "
+        "Pace & CTA guidance above says a nudge is due. Focus this reply on "
+        "actually discussing a country — ask which they're considering, or "
+        "suggest one and see what they think. The CTA opens up once a "
+        "country has genuinely been discussed both ways.\n"
     )
 
 

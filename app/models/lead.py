@@ -90,6 +90,15 @@ class Lead(UUIDMixin, TimestampMixin, Base):
     )
 
     # --- interest ------------------------------------------------------
+    # Enforced-state gate (director review): true once a real country
+    # back-and-forth has actually happened (both sides have named an approved
+    # country) — computed every turn in context.py from the real message
+    # history, never from a prompt hint. Sticky: only ever flips false -> true.
+    # The Response Guard refuses to let a draft mention a call, the director's
+    # number, or the office while this is still false, the same way it blocks
+    # an out-of-range cost figure — see
+    # app/services/guard/guard.py:_check_premature_contact_offer.
+    country_discussed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     target_country: Mapped[str | None] = mapped_column(String(80))
     budget_band: Mapped[str | None] = mapped_column(String(60))
     intake_year: Mapped[int | None] = mapped_column(Integer)

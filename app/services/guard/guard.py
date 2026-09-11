@@ -50,6 +50,15 @@ class GuardContext:
     # countries whose figure needs the reason + the director's number (Georgia/Nepal)
     sensitive_countries: list[str] = field(default_factory=list)
     counselor_phone: str = ""
+    counselor_name: str = ""
+    office_address: str = ""
+    # Enforced state (director review), not a prompt hint: true once a real
+    # country back-and-forth has actually happened with this lead (see
+    # app/services/conversation/context.py). Defaults to True so a caller that
+    # never sets it (most existing tests, and any GuardContext built without
+    # this concern) is unaffected — production wiring passes the lead's real,
+    # persistent ``country_discussed`` state.
+    country_discussed: bool = True
 
 
 @dataclass
@@ -96,6 +105,7 @@ class ResponseGuard:
         violations += self._check_overpromise(text)
         violations += self._check_pg_cost(text)
         violations += self._check_meta_leak(text)
+        violations += self._check_premature_contact_offer(text, ctx)
 
         return GuardVerdict(allowed=not violations, violations=violations, checked_text=text)
 
@@ -391,6 +401,36 @@ class ResponseGuard:
         if hits:
             return [
                 Violation("pg_cost_mention", hits[0], "PG cost figure is internal-only (plan §2)")
+            ]
+        return []
+
+    def _check_premature_contact_offer(self, text: str, ctx: GuardContext) -> list[Violation]:
+        """Director review: the call / director's number / office is an
+        enforced-state gate, not a prompt suggestion. A lead cannot be offered
+        it until a real country back-and-forth has actually happened (tracked
+        as persistent lead state, computed from real message history — see
+        app/services/conversation/context.py). A draft that jumps to the CTA
+        before that state is set is blocked and regenerated exactly like an
+        out-of-range cost figure, never left to prompt wording alone."""
+
+        if ctx.country_discussed:
+            return []
+        hits = detectors.find_counselor_offer(
+            text,
+            counselor_name=ctx.counselor_name,
+            counselor_phone=ctx.counselor_phone,
+            office_address=ctx.office_address,
+        )
+        if hits:
+            return [
+                Violation(
+                    "premature_contact_offer",
+                    ", ".join(sorted(set(hits))),
+                    "offers the call / director's number / office before a "
+                    "real country discussion has happened with this lead — "
+                    "discuss a specific country first (enforced state, see "
+                    "Lead.country_discussed)",
+                )
             ]
         return []
 

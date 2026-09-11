@@ -22,6 +22,8 @@ def _ctx(**over) -> GuardContext:
         premium_countries=list(_S.premium_cost_country_list),
         sensitive_countries=list(_S.sensitive_cost_country_list),
         counselor_phone=_S.counselor_phone,
+        counselor_name=_S.counselor_name,
+        office_address=_S.office_address,
     )
     base.update(over)
     return GuardContext(**base)
@@ -415,3 +417,67 @@ def test_two_countries_with_genuinely_different_bounds_still_blocked(guard):
     )
     assert not v.allowed
     assert "multi_country_cost" in v.rules
+
+
+# --- director review: enforced country-discussed gate before any CTA -------
+# The state is a real, tracked Lead field (see context.py / Lead.country_discussed)
+# recomputed from actual message history — never a prompt hint the model can
+# drop. `country_discussed` defaults True on GuardContext (permissive) so only
+# a caller that explicitly sets it False exercises the gate.
+
+def test_cta_blocked_before_country_discussed(guard):
+    v = guard.check(
+        "Great to hear! Would a quick call with Rafique Sir work, or shall I "
+        "share his number?",
+        context=_ctx(country_discussed=False),
+    )
+    assert not v.allowed
+    assert "premature_contact_offer" in v.rules
+
+
+def test_cta_allowed_once_country_discussed(guard):
+    v = guard.check(
+        "Great to hear! Would a quick call with Rafique Sir work, or shall I "
+        "share his number?",
+        context=_ctx(country_discussed=True),
+    )
+    assert v.allowed, v.rules
+
+
+def test_phone_number_alone_blocked_before_country_discussed(guard):
+    v = guard.check(
+        f"You can reach him on {_S.counselor_phone} whenever suits you.",
+        context=_ctx(country_discussed=False),
+    )
+    assert not v.allowed
+    assert "premature_contact_offer" in v.rules
+
+
+def test_office_address_mention_blocked_before_country_discussed(guard):
+    v = guard.check(
+        "You're welcome to visit our office and see the setup yourself.",
+        context=_ctx(country_discussed=False),
+    )
+    assert not v.allowed
+    assert "premature_contact_offer" in v.rules
+
+
+def test_pure_country_discussion_never_blocked_by_the_gate(guard):
+    # discussing a country with no CTA content must never trip this rule,
+    # gate on or off.
+    v = guard.check(
+        "Georgia has NMC-recognised government medical universities and a "
+        "straightforward admission process — what draws you to it?",
+        context=_ctx(country_discussed=False),
+    )
+    assert v.allowed, v.rules
+
+
+def test_informational_counsellor_reference_not_treated_as_an_offer(guard):
+    # "the counsellor gives X" is a deferral, not a CTA — must not trip the
+    # gate even before country has been discussed.
+    v = guard.check(
+        "The counsellor gives the exact current cutoff for your specific score.",
+        context=_ctx(country_discussed=False),
+    )
+    assert v.allowed, v.rules

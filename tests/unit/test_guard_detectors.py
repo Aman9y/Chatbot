@@ -237,3 +237,44 @@ def test_find_overpromise_positive(text):
 )
 def test_find_overpromise_negative(text):
     assert not detectors.find_overpromise(text), text
+
+
+# --- director review: contact-offer detection for the country-discussed gate
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Would a quick call with Rafique Sir work?",
+        "You can call him on +91 74478 67887 whenever suits you.",
+        "Shall I book a call for you?",
+        "You're welcome to visit our office and see the setup.",
+        "Rafique Sir's number is there whenever you want it.",
+        "I'll share his number so you can reach out.",
+    ],
+)
+def test_find_counselor_offer_positive(text):
+    hits = detectors.find_counselor_offer(
+        text,
+        counselor_name="Rafique Shaikh",
+        counselor_phone="+91 74478 67887",
+        office_address="12 MG Road, Pune",
+    )
+    assert hits, text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Georgia has NMC-recognised government medical universities.",
+        "The counsellor gives the exact current cutoff for your specific score.",
+        "Which country are you considering, or would you like a few suggestions?",
+        "Admission needs your NEET result, marksheets and a passport.",
+    ],
+)
+def test_find_counselor_offer_negative(text):
+    hits = detectors.find_counselor_offer(
+        text,
+        counselor_name="Rafique Shaikh",
+        counselor_phone="+91 74478 67887",
+        office_address="12 MG Road, Pune",
+    )
+    assert not hits, (text, hits)

@@ -440,3 +440,60 @@ def countries_named(text: str, countries: list[str]) -> list[str]:
         c for c in countries
         if c.strip() and re.search(rf"\b{re.escape(c.strip().lower())}\b", lowered)
     ]
+
+
+# --- premature contact/CTA offer (director review: enforced country-discussed
+#     gate, not a prompt hint) ------------------------------------------
+
+_CTA_PHRASES = re.compile(
+    r"\b(quick call|short call|a call with|call him|call her|message him|"
+    r"message her|reach out to him|reach out to her|book a call|schedule a "
+    r"call|set up a call|office visit|visit (?:our|the) office|come (?:in|by|"
+    r"see us)|walk in|in[- ]person meeting|15[- ]?min(?:ute)?s? call|"
+    r"his number|her number|director'?s number|counsellor'?s number|"
+    r"counselor'?s number)\b",
+    re.IGNORECASE,
+)
+
+
+def find_counselor_offer(
+    text: str,
+    *,
+    counselor_name: str = "",
+    counselor_phone: str = "",
+    office_address: str = "",
+) -> list[str]:
+    """Concrete signs a reply is offering the call / director's number / the
+    office — the CTA content the "country discussed" gate withholds until a
+    real country back-and-forth has happened. Deliberately narrow to actual
+    contact-offer language (a phone number, the director by name, explicit
+    call/meeting/office-visit phrasing) — an informational aside like "the
+    counsellor confirms the exact figure" is not itself an offer and must not
+    trip this."""
+
+    t = text or ""
+    hits: list[str] = []
+
+    phone = (counselor_phone or "").strip()
+    if phone:
+        want = re.sub(r"\D", "", phone)
+        have = re.sub(r"\D", "", t)
+        if want and (want in have or want[-10:] in have):
+            hits.append("phone number")
+
+    name = (counselor_name or "").strip()
+    if name:
+        first = name.split()[0]
+        if len(first) > 2 and re.search(rf"\b{re.escape(first)}\b", t, re.IGNORECASE):
+            hits.append(name)
+    if re.search(r"\brafique\s+sir\b", t, re.IGNORECASE):
+        hits.append("Rafique Sir")
+
+    address = (office_address or "").strip()
+    if address:
+        chunk = address.split(",")[0].strip()
+        if len(chunk) > 3 and chunk.lower() in t.lower():
+            hits.append("office address")
+
+    hits += _CTA_PHRASES.findall(t)
+    return hits

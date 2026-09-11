@@ -10,8 +10,9 @@ from typing import Any
 from app.services.llm.base import LLMClient, LLMError, LLMMessage, LLMResponse
 
 _DEFAULT_REPLY = (
-    "Thanks for reaching out! MBBS abroad is a great option to explore. "
-    "Would a quick call with our counsellor tomorrow work for you?"
+    "Thanks for reaching out! MBBS abroad is a great option to explore. Our "
+    "counsellor can help match a country to your profile — which are you "
+    "considering, or would you like a few suggestions?"
 )
 
 

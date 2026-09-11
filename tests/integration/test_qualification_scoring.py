@@ -87,7 +87,7 @@ async def test_engine_extracts_qualifiers_and_scores(
     session, redis_client, wa_client, knowledge_base
 ):
     s = _settings()
-    llm = FakeLLMClient(reply="Great, Georgia's a solid pick! Shall I set up a call?")
+    llm = FakeLLMClient(reply="Great, Georgia's a solid pick! What draws you to it?")
     lead, msg = await _lead_with_inbound(
         session,
         redis_client,

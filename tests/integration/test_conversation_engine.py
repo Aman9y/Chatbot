@@ -70,7 +70,7 @@ def _engine(session, redis, settings, wa_client, knowledge_base, llm):
 
 async def test_clean_reply_is_sent_and_traced(session, redis_client, wa_client, knowledge_base):
     s = _settings()
-    llm = FakeLLMClient(reply="Georgia is a solid option! Would a quick call tomorrow work?")
+    llm = FakeLLMClient(reply="Georgia is a solid option! What draws you to it?")
     lead, msg = await _engaged_lead(session, redis_client, s)
 
     engine = _engine(session, redis_client, s, wa_client, knowledge_base, llm)
