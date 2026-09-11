@@ -137,11 +137,26 @@ _BUDGET_FIGURE = re.compile(
     re.IGNORECASE,
 )
 
+# PCB (Physics+Chemistry+Biology) percentage — the second, equally-required
+# eligibility axis (director review). Requires the PCB / P-C-B cue explicitly,
+# so it never collides with the NEET total-score extraction above.
+_PCB_CUE = re.compile(
+    r"\bpcb\b|physics.{0,20}chemistry.{0,20}biology|biology.{0,20}chemistry.{0,20}physics",
+    re.IGNORECASE,
+)
+_PERCENT_NUM = re.compile(
+    r"(\d{1,3}(?:\.\d+)?)\s*%"
+    r"|(\d{1,3}(?:\.\d+)?)\s*(?:percent|percentage)\b"
+    r"|(?:percent(?:age)?)\D{0,12}?(\d{1,3}(?:\.\d+)?)\b",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class QualifierExtraction:
     neet_score: int | None = None
     neet_category: NeetCategory | None = None
+    pcb_percentage: float | None = None
     city: str | None = None
     target_country: str | None = None
     budget_band: str | None = None
@@ -177,6 +192,23 @@ def _heuristic_score(text: str) -> int | None:
         if _THIRD_PARTY.search(window) and not _LEAD_CUE_NEAR.search(near):
             continue  # a friend was named and this number isn't clearly the lead's
         if val < 50 and not re.search(r"\b(scored?|got|marks?|neet)\b", window, re.IGNORECASE):
+            continue
+        return val
+    return None
+
+
+def _heuristic_pcb_percentage(text: str) -> float | None:
+    if not _PCB_CUE.search(text):
+        return None
+    for m in _PERCENT_NUM.finditer(text):
+        val = float(m.group(1) or m.group(2) or m.group(3))
+        if not (0 <= val <= 100):
+            continue
+        near = text[max(0, m.start() - 16) : m.start()]
+        window = text[max(0, m.start() - 35) : m.end() + 25]
+        if _THIRD_PARTY.search(near):
+            continue  # "my friend got 60% in PCB"
+        if _THIRD_PARTY.search(window) and not _LEAD_CUE_NEAR.search(near):
             continue
         return val
     return None
@@ -254,6 +286,10 @@ def heuristic_extract(text: str, *, speaker: RoleHint) -> QualifierExtraction:
     if cat is not None:
         out.neet_category = cat
         out.methods["neet_category"] = "heuristic"
+    pcb = _heuristic_pcb_percentage(text)
+    if pcb is not None:
+        out.pcb_percentage = pcb
+        out.methods["pcb_percentage"] = "heuristic"
     country = _heuristic_country(text)
     if country is not None:
         out.target_country = country
@@ -279,6 +315,7 @@ _LLM_SYSTEM = (
     "of these keys you are sure about (omit the rest): "
     '{"neet_score": <int 1-720>, '
     '"neet_category": "general|obc|sc|st|ews|reserved", '
+    '"pcb_percentage": <float 0-100>, '
     '"city": "<city or state>", "target_country": "<country>", '
     '"budget_band": "tight|flexible|stated ~<amount>", '
     '"intake_year": <int>, "urgency": "this_intake|next_intake|undecided", '
@@ -287,7 +324,9 @@ _LLM_SYSTEM = (
     "neet_category: 'general' for general/unreserved/open; the specific one if "
     "named (obc/sc/st/ews); 'reserved' if they say they are a reserved / "
     "non-general / quota category without saying which. A score for a friend or "
-    "sibling is NOT the lead's — omit it."
+    "sibling is NOT the lead's — omit it. pcb_percentage is their percentage in "
+    "Physics+Chemistry+Biology specifically (a separate figure from the NEET "
+    "total score) — only report it if PCB/physics-chemistry-biology was named."
 )
 
 
@@ -331,6 +370,9 @@ async def extract_qualifiers(
     cat = str(data.get("neet_category", "")).lower()
     if cat in {c.value for c in NeetCategory} and cat != "unknown":
         _fill("neet_category", NeetCategory(cat))
+    pcb = data.get("pcb_percentage")
+    if isinstance(pcb, (int, float)) and 0 <= pcb <= 100:
+        _fill("pcb_percentage", float(pcb))
     if isinstance(data.get("city"), str) and data["city"].strip():
         _fill("city", data["city"].strip()[:120])
     if isinstance(data.get("target_country"), str) and data["target_country"].strip():
@@ -376,6 +418,10 @@ def apply_to_lead(
     # re-drive eligibility.
     _update("neet_score", extraction.neet_score)
 
+    # PCB percentage: same pattern, same reason — a correction should re-drive
+    # eligibility rather than stick with a stale figure.
+    _update("pcb_percentage", extraction.pcb_percentage)
+
     # NEET category: last-stated-wins, but don't overwrite a specific relaxed
     # category (OBC/SC/ST/EWS) with the generic RESERVED — that's less
     # information, not a correction.
@@ -400,10 +446,13 @@ def apply_to_lead(
         lead.parent_in_loop = True
         changed["parent_in_loop"] = True
 
-    # Eligibility is a pure function of (score, category, cutoffs). Recompute it
-    # unconditionally so it can never drift from its inputs and so statement
-    # order never matters. NEEDS_CATEGORY persists here until a category lands.
-    new_flag = compute_eligibility(lead.neet_score, lead.neet_category, settings)
+    # Eligibility is a pure function of (score, category, PCB%, cutoffs).
+    # Recompute it unconditionally so it can never drift from its inputs and so
+    # statement order never matters. NEEDS_CATEGORY / NEEDS_PCB persist here
+    # until the lead answers.
+    new_flag = compute_eligibility(
+        lead.neet_score, lead.neet_category, lead.pcb_percentage, settings
+    )
     if new_flag != lead.eligibility_flag:
         lead.eligibility_flag = new_flag
         changed["eligibility_flag"] = new_flag.value

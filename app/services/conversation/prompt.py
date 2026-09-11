@@ -55,8 +55,12 @@ def _cost_clause(settings: Settings) -> str:
     lines += [
         "",
         "Rules for every cost reply:",
-        "- Answer ONE country's cost per message. If they ask about several, take "
-        "the most relevant one and offer the rest on the call.",
+        "- Normally answer ONE country's cost per message. The one exception: "
+        "Uzbekistan, Kazakhstan and Kyrgyzstan genuinely share the same range, so "
+        "you may cite them together as examples of ONE shared figure (see "
+        "'abroad average' below) — that is not blending, it's one real number "
+        "for an equivalent tier. Never do this across countries with different "
+        "ranges.",
         "- NEVER a bare number. Always pair the figure with at least one concrete "
         "thing the money covers — visa processing, passport help, travel/airline "
         "arrangements, accommodation setup, or end-to-end support on the ground. "
@@ -69,6 +73,20 @@ def _cost_clause(settings: Settings) -> str:
         "everything costs ₹80 lakh.",
         "- Note that the real, personalised number needs a conversation — but only "
         "add the call as a next step if the per-turn CTA guidance allows it.",
+        "",
+        "The 'abroad average': when giving a general cost picture rather than "
+        "one specific country's figure, the ~₹30–35 lakh range with Uzbekistan, "
+        "Kazakhstan and Kyrgyzstan as the examples IS the real, confirmed "
+        "abroad-average figure — state it with confidence, not hedged.",
+        "",
+        "Russia and Georgia in a 'broader options' pitch: when you're naming "
+        "several countries as options (not answering a direct question about "
+        "Russia or Georgia specifically), do NOT fold their cost into the "
+        "₹30–35 lakh figure and do NOT state a number for them in that breath — "
+        "say they have their own separate pricing and offer to share it if the "
+        "lead wants. The moment they ask about Russia's or Georgia's actual cost "
+        "directly, the normal approved-range rules below apply exactly as "
+        "written (Russia's own range, and Georgia's mandatory reason + number).",
         "",
         f"Georgia and Nepal: NEVER give the figure without the reason it is higher, "
         f"and ALWAYS offer {settings.counselor_name.strip() or 'the director'}'s "
@@ -154,6 +172,21 @@ def _contact_clause(settings: Settings) -> str:
     )
 
 
+def _parent_join_speaker_clause(settings: Settings) -> str:
+    # Director review: deactivate the parent-join prompts from the live flow
+    # but keep the code path intact behind `parent_prompt_enabled` — a config
+    # flip, not a code change, brings it back.
+    if not settings.parent_prompt_enabled:
+        return ""
+    return " Offer to have them on the call with their child."
+
+
+def _parent_join_booking_clause(settings: Settings) -> str:
+    if not settings.parent_prompt_enabled:
+        return ""
+    return '- Offer to include a parent: "Would you like your parent on the call too?"\n'
+
+
 def render_system_prompt(settings: Settings) -> str:
     company = settings.company_name.strip() or "our team"
     counselor = settings.counselor_name.strip() or "our counsellor"
@@ -179,6 +212,8 @@ def render_system_prompt(settings: Settings) -> str:
         "{{deflection_modes}}": modes_reference(bot_name),
         "{{office_address}}": office,
         "{{maps_link_clause}}": maps_link_clause,
+        "{{parent_join_speaker_clause}}": _parent_join_speaker_clause(settings),
+        "{{parent_join_booking_clause}}": _parent_join_booking_clause(settings),
     }
     text = _template()
     for key, value in replacements.items():

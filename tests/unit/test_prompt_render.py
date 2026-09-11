@@ -139,3 +139,50 @@ def test_prompt_gates_cost_and_pitch_on_openers():
 def test_deflection_reference_scopes_itself_to_actual_deflections():
     text = render_system_prompt(Settings()).lower()
     assert "a greeting, small talk, or a question you can simply answer is not a deflection" in text
+
+
+# --- director review: parent-join prompts deactivated behind a config flag --
+def test_parent_join_prompts_absent_by_default():
+    text = render_system_prompt(Settings())
+    assert "{{" not in text
+    assert "Offer to include a parent" not in text
+    assert "Offer to have them on the call with their child" not in text
+
+
+def test_parent_join_prompts_present_when_flag_enabled():
+    text = render_system_prompt(Settings(parent_prompt_enabled=True))
+    assert "{{" not in text
+    assert "Offer to include a parent" in text
+    assert "Offer to have them on the call with their child" in text
+
+
+# --- director review: PCB is a second, equally-required eligibility axis ---
+def test_needs_pcb_branch_present_in_eligibility_section():
+    text = render_system_prompt(Settings()).lower()
+    assert "needs_pcb" in text
+    assert "pcb" in text and "physics" in text and "chemistry" in text and "biology" in text
+    assert "50%" in text and "45%" in text
+
+
+# --- director review: tone rules -------------------------------------------
+def test_tone_rules_praise_score_and_confident_language():
+    text = render_system_prompt(Settings())
+    low = " ".join(text.lower().split())
+    assert "that's a good score" in low or "solid score" in low
+    assert "i can help you narrow down a country" in low
+    assert "simple in both english and hindi" in low
+
+
+# --- director review: university list closing line -------------------------
+def test_university_closing_line_standing_rule_present():
+    text = render_system_prompt(Settings())
+    assert "any specific college you have in mind" in text
+
+
+# --- director review: abroad-average framing, Russia/Georgia deferred ------
+def test_cost_clause_names_abroad_average_trio_and_defers_sensitive_countries():
+    text = render_system_prompt(Settings())
+    low = text.lower()
+    assert "abroad average" in low
+    assert "uzbekistan, kazakhstan and kyrgyzstan" in low
+    assert "own separate pricing" in low

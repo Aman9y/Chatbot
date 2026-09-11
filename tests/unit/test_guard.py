@@ -371,3 +371,47 @@ def test_pronoun_us_does_not_read_as_premium_country(guard):
         context=_ctx(),
     )
     assert v.allowed, v.rules
+
+
+# --- director review: same-bound-group cost framing (item 9) ---------------
+def test_same_bound_trio_named_together_is_allowed(guard):
+    v = guard.check(
+        "Uzbekistan, Kazakhstan and Kyrgyzstan all run about ₹30–35 lakh, "
+        "covering visa and accommodation — happy to go deeper on any of them.",
+        context=_ctx(),
+    )
+    assert v.allowed, v.rules
+
+
+def test_same_bound_trio_with_deferred_sensitive_country_mention_is_allowed(guard):
+    # Russia/Georgia named with NO figure of their own ("separately priced") —
+    # must not trip multi_country_cost or the Georgia mandatory-number rule.
+    v = guard.check(
+        "Most families land around ₹30–35 lakh with Uzbekistan, Kazakhstan or "
+        "Kyrgyzstan, visa and accommodation included. Russia and Georgia have "
+        "their own separate pricing — want those details too?",
+        context=_ctx(),
+    )
+    assert v.allowed, v.rules
+
+
+def test_same_bound_trio_still_blocks_if_a_distinct_figure_is_added(guard):
+    # Georgia named WITH its own (different) figure in the same reply — still
+    # genuinely blending ranges, must still be blocked.
+    v = guard.check(
+        "Uzbekistan, Kazakhstan and Kyrgyzstan run about ₹30–35 lakh; Georgia "
+        "is ₹38–55 lakh, visa included.",
+        context=_ctx(),
+    )
+    assert not v.allowed
+
+
+def test_two_countries_with_genuinely_different_bounds_still_blocked(guard):
+    # Russia (27-45) and Bangladesh (32-45) don't share an identical bound —
+    # naming both with one figure is still genuinely ambiguous blending.
+    v = guard.check(
+        "Russia and Bangladesh both come to about ₹30 lakh, visa included.",
+        context=_ctx(),
+    )
+    assert not v.allowed
+    assert "multi_country_cost" in v.rules

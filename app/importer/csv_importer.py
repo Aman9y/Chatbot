@@ -168,6 +168,16 @@ def _parse_int(value: str) -> int | None:
         return None
 
 
+def _parse_float(value: str) -> float | None:
+    value = value.strip().replace("%", "")
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
 def _parse_consent(value: str) -> ConsentStatus:
     v = value.strip().lower()
     if v in _TRUE:
@@ -303,8 +313,11 @@ class LeadCsvImporter:
         year = _parse_int(row.get("neet_year", "")) or self._settings.neet_year
         if year and lead.neet_year is None:
             lead.neet_year = year
+        pcb = _parse_float(row.get("pcb_percentage", ""))
+        if pcb is not None and lead.pcb_percentage is None:
+            lead.pcb_percentage = pcb
         lead.eligibility_flag = compute_eligibility(
-            lead.neet_score, lead.neet_category, self._settings
+            lead.neet_score, lead.neet_category, lead.pcb_percentage, self._settings
         )
 
     async def _apply_consent(

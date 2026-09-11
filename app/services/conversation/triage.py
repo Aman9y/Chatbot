@@ -218,8 +218,9 @@ _MATRIX: tuple[TopicRule, ...] = (
         "parents_concern", "Parent-voice concerns", "PARTIAL",
         ("my son", "my daughter", "my child", "as a parent", "beta", "beti",
          "worried about my", "is it safe for my"),
-        "Lead with validation, answer briefly, then offer to loop the parent into "
-        "the call directly ('Would you like to be on the call with your child?').",
+        "Director review: validate the concern genuinely — don't dismiss it, "
+        "don't over-explain either — then position getting proper guidance "
+        "from Rafique Sir as exactly how to avoid that risk. Answer briefly.",
     ),
     # ---- FULL --------------------------------------------------------
     TopicRule(
@@ -235,15 +236,20 @@ _MATRIX: tuple[TopicRule, ...] = (
         "nmc_recognition", "NMC recognition & Indian licensing", "FULL",
         ("nmc", "mci", "recognised", "recognized", "valid in india", "indian license",
          "practice in india", "wdoms", "who listed", "is the degree valid"),
-        "Yes, recognised if the university meets the NMC criteria. Big trust "
-        "builder — don't rush. Give the 6 criteria compactly if asked.",
+        "Director review: when NMC or the admission process is actually asked "
+        "about, give the FULL explanation — the 6 NMC criteria, WHO/WDOMS "
+        "listing, all of it — never a partial answer. Big trust builder, don't "
+        "rush it. But don't volunteer NMC criteria unprompted in replies where "
+        "it wasn't asked about — smart, not constant.",
     ),
     TopicRule(
         "admission_process", "Admission process", "FULL",
         ("admission process", "how does admission", "how to apply", "application "
          "process", "steps to admission", "procedure", "how it works"),
-        "The 8-step chain + '~28 days for a UG MBBS student applying abroad'. "
-        "Explaining it openly builds trust. No admission/intake guarantee.",
+        "The 8-step chain + '~20 days for a UG MBBS student applying abroad "
+        "end to end — country/university selection, documentation, budget, "
+        "tickets, end-to-end support'. Explaining it openly builds trust. No "
+        "admission/intake guarantee.",
     ),
     TopicRule(
         "documents", "Documents & requirements", "FULL",
@@ -256,7 +262,7 @@ _MATRIX: tuple[TopicRule, ...] = (
         "deadlines", "Application deadlines & intake", "FULL",
         ("deadline", "last date", "intake", "when to apply", "which month",
          "session start", "batch start", "admission close"),
-        "Intake months + the ~28-day (UG-abroad) process. The urgency is real in "
+        "Intake months + the ~20-day (UG-abroad) process. The urgency is real in "
         "the calendar — don't manufacture extra.",
     ),
     TopicRule(

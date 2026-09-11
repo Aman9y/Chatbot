@@ -19,6 +19,7 @@ from app.models.enums import (
 from app.models.lead import Lead
 from app.models.message import Message
 from app.services.conversation.deflection import DeflectionPlan, select_deflection, turn_hint
+from app.services.conversation.extraction import heuristic_extract
 from app.services.conversation.pacing import PacePlan, plan_pace
 from app.services.conversation.prompt import render_system_prompt
 from app.services.conversation.triage import (
@@ -68,6 +69,8 @@ def _profile_summary(lead: Lead) -> str:
         parts.append(f"neet_score={lead.neet_score}")
     if lead.neet_category and lead.neet_category.value != "unknown":
         parts.append(f"neet_category={lead.neet_category.value}")
+    if lead.pcb_percentage is not None:
+        parts.append(f"pcb_percentage={lead.pcb_percentage:g}%")
     if lead.target_country:
         parts.append(f"target_country={lead.target_country}")
     if lead.budget_band:
@@ -197,16 +200,28 @@ async def build_turn_context(
     financing = "yes" if lead.financing_cleared else "no"
 
     message_depth = sum(1 for m in llm_messages if m.role == "user")
-    pace_plan = plan_pace(
-        message_depth=message_depth,
-        minutes_since_last_bot=minutes_since_last_bot,
-        engagement_phase=engagement_phase,
-    )
     topic_match = classify_topic(latest_text)
     objection = detect_objection(latest_text)
 
     prior_user_texts = [m.content for m in llm_messages[:-1] if m.role == "user"]
     prior_bot_texts = [m.content for m in llm_messages if m.role == "assistant"]
+
+    # Engagement signal (director review): the number should surface on genuine
+    # engagement — a real question or follow-through, not a fixed message count.
+    # A turn counts as substantive if it matched a real topic (not just small
+    # talk) OR it gave us a qualifier we asked for (score, category, country,
+    # budget, ...) — i.e. "moving past surface-level chat" either direction.
+    substantive_depth = sum(
+        1
+        for t in (*prior_user_texts, latest_text)
+        if classify_topic(t) is not None or heuristic_extract(t, speaker=speaker).any()
+    )
+    pace_plan = plan_pace(
+        message_depth=message_depth,
+        minutes_since_last_bot=minutes_since_last_bot,
+        engagement_phase=engagement_phase,
+        substantive_depth=substantive_depth,
+    )
     deflect_count, last_mode = await _deflection_history(session, lead)
     repeat = _looks_like_repeat(latest_text, prior_user_texts)
     frustrated = bool(_FRUSTRATED.search(latest_text))
@@ -230,6 +245,7 @@ async def build_turn_context(
         f"financing_cleared: {financing}\n"
         f"{_pace_block(pace_plan)}"
         f"{_eligibility_block(lead)}"
+        f"{_discovery_block(lead, message_depth)}"
         f"{_topic_block(topic_match)}"
         f"{_objection_block(objection)}"
         f"{_deflection_block(deflection, settings)}"
@@ -289,7 +305,9 @@ def _pace_block(p: PacePlan) -> str:
     return (
         "\n## Pace & CTA (sales-playbook Part 2 — conversation clock)\n"
         f"chat_speed: {p.pace} — {p.pace_note}\n"
-        f"message_depth: {p.message_depth}\n"
+        f"message_depth: {p.message_depth} (substantive so far: "
+        f"{p.substantive_depth} — real questions answered or qualifiers given, "
+        "not small talk)\n"
         f"tone_stage: {p.tone_stage} — {p.tone_note}\n"
         f"cta_mode: {p.cta_mode} — {p.cta_note}\n"
         f"reply_length: {p.reply_length_hint}\n"
@@ -338,25 +356,66 @@ def _objection_block(o: Objection | None) -> str:
 
 
 def _eligibility_block(lead: Lead) -> str:
-    """A persistent open item while the lead's NEET score sits in the band where
-    the answer depends on their category. Driven by the tracked
-    ``lead.eligibility_flag`` state, so it resurfaces every turn — however many
-    other topics come and go — until a category is actually stated."""
+    """A persistent open item while eligibility can't be concluded yet. Driven
+    by the tracked ``lead.eligibility_flag`` state, so it resurfaces every turn
+    — however many other topics come and go — until the lead answers.
 
-    if lead.eligibility_flag is not EligibilityFlag.NEEDS_CATEGORY:
+    Two axes, both required (director review): the NEET score cutoff AND the
+    PCB (Physics+Chemistry+Biology) percentage. NEEDS_CATEGORY covers either
+    axis sitting in the band where the reservation category decides it;
+    NEEDS_PCB fires once the NEET-score axis clears but PCB% is still unknown.
+    """
+
+    if lead.eligibility_flag is EligibilityFlag.NEEDS_CATEGORY:
+        return (
+            "\n## OPEN QUALIFIER — must resolve, do not drop\n"
+            f"The lead's NEET score ({lead.neet_score}) sits in the band where "
+            "whether the abroad route is open depends on their reservation "
+            "category (general vs OBC/SC/ST/EWS) — this also decides which PCB "
+            "percentage threshold applies. You do NOT know their category yet.\n"
+            "- Do NOT tell them the route is open OR closed, and do NOT assume a "
+            "category to reason from — not this turn, not later.\n"
+            "- After answering whatever they actually asked, weave in ONE short, "
+            "natural ask for their category (\"quick one — are you general "
+            "category or OBC/SC/ST/EWS?\"). Ask it plainly, once per reply.\n"
+            "- This stays open across every other topic (country, budget, "
+            "safety, FMGE…) until they answer. Don't badger, but don't let it "
+            "drop.\n"
+        )
+    if lead.eligibility_flag is EligibilityFlag.NEEDS_PCB:
+        return (
+            "\n## OPEN QUALIFIER — must resolve, do not drop\n"
+            f"The lead's NEET score ({lead.neet_score}) clears the cutoff, but "
+            "eligibility for the abroad route needs BOTH the NEET score AND "
+            "their PCB (Physics+Chemistry+Biology) percentage — a good NEET "
+            "score alone is not enough, and you do not know their PCB% yet.\n"
+            "- Do NOT tell them they're eligible or confirm the route is open "
+            "based on the NEET score alone — not this turn, not later.\n"
+            "- After answering whatever they actually asked, weave in ONE short, "
+            "natural ask for their PCB percentage (\"what was your PCB "
+            "percentage — Physics, Chemistry, Biology combined?\"). Once per "
+            "reply.\n"
+            "- This stays open across every other topic until they answer. "
+            "Don't badger, but don't let it drop.\n"
+        )
+    return ""
+
+
+def _discovery_block(lead: Lead, message_depth: int) -> str:
+    """Director review: proactively ask, early, whether the lead is even
+    considering India or abroad — a discovery question, not just reactive. A
+    light one-turn nudge, not a persistent tracked state like the eligibility
+    blocks above: it only matters while the conversation is still fresh."""
+
+    if message_depth > 2 or lead.target_country:
         return ""
     return (
-        "\n## OPEN QUALIFIER — must resolve, do not drop\n"
-        f"The lead's NEET score ({lead.neet_score}) sits in the band where whether "
-        "the government/abroad route is open depends on their reservation category "
-        "(general vs OBC/SC/ST/EWS). You do NOT know it yet.\n"
-        "- Do NOT tell them the route is open OR closed, and do NOT assume a "
-        "category to reason from — not this turn, not later.\n"
-        "- After answering whatever they actually asked, weave in ONE short, "
-        "natural ask for their category (\"quick one — are you general category "
-        "or OBC/SC/ST/EWS?\"). Ask it plainly, once per reply.\n"
-        "- This stays open across every other topic (country, budget, safety, "
-        "FMGE…) until they answer. Don't badger, but don't let it drop.\n"
+        "\n## Early discovery — ask once, if it fits\n"
+        "This is a fresh conversation and we don't know yet whether they're "
+        "weighing MBBS in India (private) against going abroad, or already set "
+        "on abroad. If it fits naturally with what they asked, weave in that "
+        "discovery question now — one line, not a separate message, and never "
+        "as a list. Don't force it if they've already told you.\n"
     )
 
 

@@ -158,6 +158,23 @@ class ResponseGuard:
 
         named = detectors.countries_named(text, ranged)
 
+        # Director review: several countries that genuinely SHARE one approved
+        # range (Uzbekistan/Kazakhstan/Kyrgyzstan are all ~30-35L) may be named
+        # together as examples of ONE real figure — that is not "blending"
+        # different ranges, it is citing a single number for an equivalent
+        # tier. Take the largest cluster of named countries that share an
+        # identical bound; a country with a genuinely different bound (Russia,
+        # Georgia) can still be named alongside it with no figure of its own —
+        # rule 5 below still catches it if the reply states a number for it.
+        same_bound_group: list[str] | None = None
+        if len(named) >= 2:
+            by_bound: dict[tuple[float, float], list[str]] = {}
+            for c in named:
+                by_bound.setdefault(ctx.country_bounds[c], []).append(c)
+            cluster = max(by_bound.values(), key=len)
+            if len(cluster) >= 2:
+                same_bound_group = cluster
+
         # "The lead said their budget is 30 lakh — is that enough?" The bot
         # confirming that figure against a couple of countries is NOT a
         # range-quoting reply and must not be blocked as multi-country. It counts
@@ -201,10 +218,11 @@ class ResponseGuard:
                         )
                     ]
 
-        # 3. Strict: one country per cost reply. Two named countries + figures
-        #    means the lead can't tell which range is which — unless the bot is
-        #    only echoing the lead's stated budget.
-        if len(named) >= 2 and not echoing_budget:
+        # 3. Strict: one country per cost reply, UNLESS the extra countries are
+        #    either (a) genuinely sharing one range (same_bound_group) or
+        #    (b) the bot is only echoing the lead's stated budget. Otherwise the
+        #    lead can't tell which range is which.
+        if len(named) >= 2 and not echoing_budget and not same_bound_group:
             return [
                 Violation(
                     "multi_country_cost",
@@ -214,9 +232,13 @@ class ResponseGuard:
                 )
             ]
 
-        # 4. Which bound applies.
+        # 4. Which bound applies, and which named countries the stated figure
+        #    actually belongs to (`priced_countries` — used by rule 6 below so a
+        #    country merely mentioned in passing, with no figure of its own,
+        #    never triggers the sensitive-country contact requirement).
         if echoing_budget and len(named) != 1:
             country = None
+            priced_countries = named
             pool = [ctx.country_bounds[c] for c in named] or list(ctx.country_bounds.values())
             lo = min(b[0] for b in pool)
             hi = max(b[1] for b in pool)
@@ -225,18 +247,26 @@ class ResponseGuard:
                 if named
                 else f"general tier envelope (₹{lo:g}–{hi:g} lakh)"
             )
+        elif same_bound_group:
+            country = None
+            priced_countries = same_bound_group
+            lo, hi = ctx.country_bounds[same_bound_group[0]]
+            label = f"shared tier ({', '.join(same_bound_group)}) ₹{lo:g}–{hi:g} lakh"
         elif named:
             country = named[0]
+            priced_countries = [country]
             lo, hi = ctx.country_bounds[country]
             label = f"{country} {ctx.country_display.get(country, '')}".strip()
         elif ctx.india_compare_bounds and detectors.india_context(haystack):
             country = None
+            priced_countries = []
             lo, hi = ctx.india_compare_bounds
             label = f"India-private comparison {ctx.india_compare_display or ''}".strip()
         elif ctx.country_bounds:
             # figure with no country and no India context: only the overall
             # tier envelope is defensible — the lead can't misattribute it.
             country = None
+            priced_countries = []
             lo = min(b[0] for b in ctx.country_bounds.values())
             hi = max(b[1] for b in ctx.country_bounds.values())
             label = f"general tier envelope (₹{lo:g}–{hi:g} lakh)"
@@ -264,9 +294,13 @@ class ResponseGuard:
         out: list[Violation] = []
 
         # 6. Georgia / Nepal: the number for the director must be in the reply —
-        #    whether the figure is a quoted range or an echo of the lead's budget.
-        sensitive_named = country if country in ctx.sensitive_countries else next(
-            (c for c in named if c in ctx.sensitive_countries), None
+        #    whether the figure is a quoted range or an echo of the lead's
+        #    budget. Scoped to `priced_countries` (the ones the stated figure
+        #    actually belongs to), not every named country — a sensitive
+        #    country merely mentioned ("Georgia has its own separate pricing")
+        #    with no figure of its own must not trigger this.
+        sensitive_named = next(
+            (c for c in priced_countries if c in ctx.sensitive_countries), None
         )
         if sensitive_named and not detectors.reply_offers_number(
             text, ctx.counselor_phone

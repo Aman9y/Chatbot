@@ -92,7 +92,7 @@ async def test_engine_extracts_qualifiers_and_scores(
         session,
         redis_client,
         s,
-        "I got 250 in NEET, general category, want Georgia, starting this year",
+        "I got 250 in NEET, general category, 60% in PCB, want Georgia, starting this year",
     )
     engine = ConversationEngine(
         session, redis_client, s, llm=llm, kb=knowledge_base, wa_client=wa_client

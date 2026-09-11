@@ -10,6 +10,18 @@ Two clocks:
 Everything here is a pure function of inputs the engine already has. It produces
 short strings that get injected into the system prompt each turn; the LLM does
 the writing.
+
+Director review: the director's number should surface on genuine ENGAGEMENT —
+real questions, follow-through, moving past surface-level chat — not a fixed
+message count, while still reliably closing within roughly 7-8 exchanges. So
+CTA timing is driven by two signals together: raw message depth (a ceiling that
+guarantees it never drags on) and `substantive_depth` (how many of those
+messages were actually substantive — computed in context.py from topic matches
++ extracted qualifiers), which can accelerate straight to a direct ask once the
+lead is clearly engaged, without waiting for the ceiling. Depths 1-3 stay a
+CTA-free floor either way — that window is for giving real value, not pitching
+(see the "curious_host" tone note): the fix for "don't warm up too slowly" is
+answering their actual question for real in that window, not asking sooner.
 """
 
 from __future__ import annotations
@@ -21,14 +33,22 @@ Pace = Literal["constant", "moderate", "slow"]
 ToneStage = Literal["curious_host", "helpful_expert", "bridge_builder", "honest_handoff"]
 CtaMode = Literal["none", "soft", "direct", "honest_handoff", "nurture_soft"]
 
-# soft-CTA / direct-CTA message-depth thresholds per pace (playbook Part 2).
-# Soft never lands before depth 4 — depths 1-3 are the curious-host stage and
-# carry no CTA at all (see `plan_pace`).
+# soft-CTA / direct-CTA message-depth CEILINGS per pace (playbook Part 2) — the
+# latest a genuinely quiet lead reaches each stage, guaranteeing a close by
+# roughly message 7-8 even with no engagement signal to accelerate on. Soft
+# never lands before depth 4 — depths 1-3 are the curious-host stage and carry
+# no CTA at all (see `plan_pace`). `_ENGAGED_ACCEL` below lets a clearly
+# engaged lead reach `direct` sooner than this ceiling. (moderate's old direct
+# ceiling of 10 dragged well past the 7-8 target — tightened to 8.)
 _CTA_THRESHOLDS: dict[Pace, tuple[int, int]] = {
-    "constant": (4, 6),
-    "moderate": (5, 10),
-    "slow": (4, 7),
+    "constant": (4, 7),
+    "moderate": (4, 8),
+    "slow": (4, 8),
 }
+# Two genuinely substantive exchanges (real questions answered, or qualifiers
+# given) is enough engagement to go straight to a direct ask rather than
+# linger in "soft" waiting for the depth ceiling above.
+_ENGAGED_ACCEL = 2
 
 _REPLY_LENGTH: dict[Pace, str] = {
     "constant": (
@@ -62,10 +82,14 @@ _PACE_NOTE: dict[Pace, str] = {
 
 _TONE_NOTE: dict[ToneStage, str] = {
     "curious_host": (
-        "Curious host: warm, brief, ask before you tell. No pitching, and no "
-        "mention of a call, a meeting, the office, or the director yet — not even "
-        "as 'the person who can help'. Just make them feel heard and find out "
-        "what they need."
+        "Curious host: warm, brief, no PITCH — but if they ask something real, "
+        "answer it for real. These first few messages are the critical window: "
+        "give genuine, substantive value now, don't stall on rapport-building "
+        "alone or they lose interest. No mention of a call, a meeting, the "
+        "office, or the director yet — not even as 'the person who can help'. "
+        "Confident, capable language on what you can do ('I can help you narrow "
+        "down a country and get you into a university that fits') — not vague "
+        "or hedgy."
     ),
     "helpful_expert": (
         "Helpful expert: small, specific, accurate nuggets that show you know this "
@@ -99,7 +123,7 @@ _CTA_NOTE: dict[CtaMode, str] = {
         "Direct CTA: ask plainly for a yes to a call OR an office visit (their "
         "choice), framed as them reaching out to the director — give his number "
         "for them to call/message, never 'I'll set it up' or 'he'll call you'. No "
-        "clock time. Free, ~15 min, no obligation. Offer to include a parent."
+        "clock time. Free, ~15 min, no obligation."
     ),
     "honest_handoff": (
         "Honest-handoff close: be honest about your limits, name their specific "
@@ -118,6 +142,7 @@ _CTA_NOTE: dict[CtaMode, str] = {
 class PacePlan:
     pace: Pace
     message_depth: int
+    substantive_depth: int
     tone_stage: ToneStage
     cta_mode: CtaMode
     reply_length_hint: str
@@ -148,7 +173,7 @@ def _tone_stage(depth: int, engagement_phase: str) -> ToneStage:
     return "honest_handoff"
 
 
-def _cta_mode(pace: Pace, depth: int, engagement_phase: str) -> CtaMode:
+def _cta_mode(pace: Pace, depth: int, engagement_phase: str, substantive_depth: int) -> CtaMode:
     if engagement_phase == "nurture":
         return "nurture_soft"
     if engagement_phase == "handoff":
@@ -157,16 +182,29 @@ def _cta_mode(pace: Pace, depth: int, engagement_phase: str) -> CtaMode:
     if depth >= direct:
         return "direct"
     if depth >= soft:
+        # engagement-driven acceleration: once genuinely engaged, go straight
+        # to direct rather than linger in soft waiting for the depth ceiling —
+        # "surfaces on engagement signals, not a fixed message number".
+        if substantive_depth >= _ENGAGED_ACCEL:
+            return "direct"
+        return "soft"
+    if substantive_depth >= _ENGAGED_ACCEL:
+        # earns at least a soft mention before the floor too — the curious-host
+        # coherence check below still protects depths 1-3 either way.
         return "soft"
     return "none"
 
 
 def plan_pace(
-    *, message_depth: int, minutes_since_last_bot: float | None, engagement_phase: str
+    *,
+    message_depth: int,
+    minutes_since_last_bot: float | None,
+    engagement_phase: str,
+    substantive_depth: int = 0,
 ) -> PacePlan:
     pace = classify_pace(minutes_since_last_bot)
     tone = _tone_stage(message_depth, engagement_phase)
-    cta = _cta_mode(pace, message_depth, engagement_phase)
+    cta = _cta_mode(pace, message_depth, engagement_phase, substantive_depth)
     # Coherence: the curious-host stage never carries a CTA, whatever the depth
     # thresholds say. Tone and CTA must not give the model opposite instructions.
     if tone == "curious_host" and cta in ("soft", "direct"):
@@ -174,6 +212,7 @@ def plan_pace(
     return PacePlan(
         pace=pace,
         message_depth=message_depth,
+        substantive_depth=substantive_depth,
         tone_stage=tone,
         cta_mode=cta,
         reply_length_hint=_REPLY_LENGTH[pace],

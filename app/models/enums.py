@@ -109,10 +109,16 @@ class NeetCategory(StrEnum):
 class EligibilityFlag(StrEnum):
     ABOVE_CUTOFF = "above_cutoff"
     BELOW_CUTOFF = "below_cutoff"
-    # score sits in the general/reserved cutoff band and category is not yet
-    # known — the answer genuinely depends on it. A persistent state: it stays
-    # until category is answered (see services/eligibility.py).
+    # NEET score sits in the general/reserved cutoff band (or PCB percentage
+    # sits in its own band) and category is not yet known — the answer
+    # genuinely depends on it. A persistent state: it stays until category is
+    # answered (see services/eligibility.py).
     NEEDS_CATEGORY = "needs_category"
+    # NEET score clears (category-resolved or not), but the PCB
+    # (Physics+Chemistry+Biology) percentage — the second, equally-required
+    # eligibility dimension — has not been stated yet. Persistent, same
+    # pattern as NEEDS_CATEGORY: stays until the lead states it.
+    NEEDS_PCB = "needs_pcb"
     UNKNOWN = "unknown"
 
 

@@ -115,12 +115,16 @@ def test_apply_to_lead_fills_and_recomputes_eligibility():
     s = Settings(neet_cutoff_general=213, neet_cutoff_obc=175)
     lead = Lead(phone_e164="+919812345670")
     e = QualifierExtraction(
-        neet_score=250, neet_category=NeetCategory.GENERAL, target_country="Georgia"
+        neet_score=250,
+        neet_category=NeetCategory.GENERAL,
+        target_country="Georgia",
+        pcb_percentage=60.0,
     )
     changed = apply_to_lead(lead, e, s)
     assert lead.neet_score == 250
     assert lead.neet_category == NeetCategory.GENERAL
     assert lead.target_country == "Georgia"
+    assert lead.pcb_percentage == 60.0
     assert lead.eligibility_flag == EligibilityFlag.ABOVE_CUTOFF
     assert "eligibility_flag" in changed
     assert lead.qualifiers_updated_at is not None
@@ -131,7 +135,13 @@ def test_apply_to_lead_score_is_last_stated_wins_and_re_evaluates():
     # re-drive eligibility, not stick with the old one.
     s = Settings(neet_cutoff_general=213, neet_cutoff_obc=175)
     lead = Lead(phone_e164="+919812345670", neet_score=160)
-    apply_to_lead(lead, QualifierExtraction(neet_score=160, neet_category=NeetCategory.GENERAL), s)
+    apply_to_lead(
+        lead,
+        QualifierExtraction(
+            neet_score=160, neet_category=NeetCategory.GENERAL, pcb_percentage=60.0
+        ),
+        s,
+    )
     assert lead.eligibility_flag == EligibilityFlag.BELOW_CUTOFF
     changed = apply_to_lead(lead, QualifierExtraction(neet_score=230), s)
     assert lead.neet_score == 230
@@ -151,7 +161,7 @@ def test_ambiguous_band_becomes_needs_category_and_persists():
     s = Settings(neet_cutoff_general=213, neet_cutoff_obc=175)
     lead = Lead(phone_e164="+919812345670")
     # score 200, category unknown -> genuinely undetermined
-    apply_to_lead(lead, QualifierExtraction(neet_score=200), s)
+    apply_to_lead(lead, QualifierExtraction(neet_score=200, pcb_percentage=60.0), s)
     assert lead.eligibility_flag == EligibilityFlag.NEEDS_CATEGORY
     # five unrelated turns — nothing about category — flag must not drift
     for extra in (
@@ -181,7 +191,13 @@ def test_category_before_score_still_resolves():
 def test_reserved_category_uses_the_relaxed_cutoff():
     s = Settings(neet_cutoff_general=213, neet_cutoff_obc=175)
     lead = Lead(phone_e164="+919812345670", neet_score=200)
-    apply_to_lead(lead, QualifierExtraction(neet_score=200, neet_category=NeetCategory.RESERVED), s)
+    apply_to_lead(
+        lead,
+        QualifierExtraction(
+            neet_score=200, neet_category=NeetCategory.RESERVED, pcb_percentage=60.0
+        ),
+        s,
+    )
     assert lead.eligibility_flag == EligibilityFlag.ABOVE_CUTOFF
 
 

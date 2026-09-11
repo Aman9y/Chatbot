@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -80,6 +80,11 @@ class Lead(UUIDMixin, TimestampMixin, Base):
         NeetCategory, default=NeetCategory.UNKNOWN, nullable=False
     )
     neet_year: Mapped[int | None] = mapped_column(Integer)
+    # PCB (Physics+Chemistry+Biology) percentage in the qualifying exam — the
+    # SECOND, equally-required half of eligibility alongside the NEET score cutoff
+    # (director-confirmed: General 50% / OBC 45%). Tracked as real, persistent
+    # state exactly like neet_score — see app/services/eligibility.py.
+    pcb_percentage: Mapped[float | None] = mapped_column(Float)
     eligibility_flag: Mapped[EligibilityFlag] = enum_column(
         EligibilityFlag, default=EligibilityFlag.UNKNOWN, nullable=False
     )

@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     neet_year: int | None = 2026
     neet_cutoff_general: int | None = 213
     neet_cutoff_obc: int | None = 175
+    # PCB (Physics+Chemistry+Biology) percentage — director-confirmed
+    # 2026-09-12: the SECOND, equally-required eligibility axis alongside the
+    # NEET score cutoff above. Neither alone is sufficient — see
+    # app/services/eligibility.py. Blank -> that axis is never used to fail or
+    # clear a lead (same "don't guess" pattern as the NEET cutoffs).
+    pcb_cutoff_general: float | None = 50.0
+    pcb_cutoff_obc: float | None = 45.0
 
     # --- per-country stateable cost ranges (confirmed 2026-09-09 by Hamza,
     #     Stellar Educonsultancy). JSON: {"Country": "display range"}. Each range
@@ -198,6 +205,11 @@ class Settings(BaseSettings):
     # --- booking / handoff ---------------------------------------------
     booking_detection_enabled: bool = True
     counselor_webhook_url: str = ""
+    # Director review 2026-09-12: deactivate the "would you like your parent
+    # on the call too" / "bring your child on the call" family-inclusion
+    # prompts from the live flow — but keep the code path intact so it's a
+    # config flip, not a code change, to bring back. OFF by default.
+    parent_prompt_enabled: bool = False
 
     # --- scheduler / re-engagement (Phase 5 + 6) -----------------------
     celery_broker_url: str = ""  # blank -> derived from redis_url
@@ -294,7 +306,14 @@ class Settings(BaseSettings):
             return MinorPolicyStatus.PENDING_REVIEW
         return v
 
-    @field_validator("neet_year", "neet_cutoff_general", "neet_cutoff_obc", mode="before")
+    @field_validator(
+        "neet_year",
+        "neet_cutoff_general",
+        "neet_cutoff_obc",
+        "pcb_cutoff_general",
+        "pcb_cutoff_obc",
+        mode="before",
+    )
     @classmethod
     def _blank_int_to_none(cls, v: object) -> object:
         if v is None or (isinstance(v, str) and not v.strip()):

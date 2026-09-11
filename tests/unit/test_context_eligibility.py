@@ -14,14 +14,23 @@ def _lead(flag, score=None):
     )
 
 
-def test_block_present_only_for_needs_category():
+def test_block_present_only_for_needs_category_or_needs_pcb():
     assert _eligibility_block(_lead(EligibilityFlag.NEEDS_CATEGORY, 200)) != ""
+    assert _eligibility_block(_lead(EligibilityFlag.NEEDS_PCB, 250)) != ""
     for other in (
         EligibilityFlag.ABOVE_CUTOFF,
         EligibilityFlag.BELOW_CUTOFF,
         EligibilityFlag.UNKNOWN,
     ):
         assert _eligibility_block(_lead(other, 200)) == ""
+
+
+def test_needs_pcb_block_names_the_score_and_forbids_confirming_eligible():
+    block = _eligibility_block(_lead(EligibilityFlag.NEEDS_PCB, 250)).lower()
+    assert "250" in block
+    assert "pcb" in block
+    assert "do not tell them they're eligible" in block
+    assert "across every other topic" in block or "every other topic" in block
 
 
 def test_block_names_the_score_and_forbids_assuming():
