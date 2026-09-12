@@ -55,6 +55,14 @@ def check_config() -> None:
     typer.echo(f"database_url          : {settings.database_url}")
     typer.echo(f"redis_url             : {settings.redis_url}")
     typer.echo(f"whatsapp_client       : {settings.whatsapp_client}")
+    if settings.whatsapp_client == "360dialog":
+        typer.echo(f"  d360_base_url       : {settings.d360_base_url}")
+        typer.echo(f"  d360_api_key set    : {bool(settings.d360_api_key)}")
+    typer.echo(f"webhook_signature_required : {settings.webhook_signature_required}")
+    typer.echo(
+        "webhook_basic_auth    : "
+        f"{'configured' if settings.webhook_basic_auth_username else 'not configured'}"
+    )
     typer.echo(f"service_window_hours  : {settings.service_window_hours}")
     typer.echo(f"require_verified_consent : {settings.outreach_require_verified_consent}")
     typer.echo(f"consent_gate_enabled  : {settings.consent_gate_enabled}")

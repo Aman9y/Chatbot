@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # --- Meta WhatsApp Cloud API ---------------------------------------------
-    whatsapp_client: Literal["fake", "meta"] = "fake"
+    whatsapp_client: Literal["fake", "meta", "360dialog"] = "fake"
     meta_app_secret: str = ""
     meta_verify_token: str = "dev-verify-token"
     meta_access_token: str = ""
@@ -46,6 +46,32 @@ class Settings(BaseSettings):
     meta_graph_base_url: str = "https://graph.facebook.com"
     meta_graph_version: str = "v21.0"
     request_timeout_seconds: float = 15.0
+
+    # --- 360dialog (WhatsApp Business API v2 — Meta Cloud API pass-through) --
+    # Confirmed from the 360dialog dashboard: base URL, "D360-API-KEY" header
+    # (not Bearer, not Meta's Graph format), POST /messages (no phone-number-id
+    # in the path — the key itself is scoped to one WABA channel). The request/
+    # response JSON body is otherwise Cloud-API-compatible, so
+    # Dialog360WhatsAppClient reuses MetaWhatsAppClient's payload building —
+    # see app/services/whatsapp/dialog360.py.
+    d360_api_key: str = ""
+    d360_base_url: str = "https://waba-v2.360dialog.io"
+
+    # --- inbound webhook security --------------------------------------------
+    # Meta signs every webhook POST with X-Hub-Signature-256 (HMAC of
+    # meta_app_secret); 360dialog does not — there is no "your Meta app" to
+    # hold a secret for in the 360dialog-managed setup, so it cannot produce
+    # that signature. Set this false when WHATSAPP_CLIENT=360dialog so the
+    # webhook doesn't reject every inbound event; leave it true for a direct
+    # Meta integration. See app/services/webhook_processor.py.
+    webhook_signature_required: bool = True
+    # Optional extra layer for a 360dialog (or any non-HMAC-signing) webhook
+    # source: HTTP Basic Auth on the webhook URL itself. 360dialog will POST
+    # whatever Authorization header a "https://user:pass@host/path" webhook
+    # URL implies, same as any HTTP client honouring URL userinfo. Blank
+    # (default) = no additional check.
+    webhook_basic_auth_username: str = ""
+    webhook_basic_auth_password: str = ""
 
     # --- windows / cadence ---------------------------------------------------
     service_window_hours: int = 24

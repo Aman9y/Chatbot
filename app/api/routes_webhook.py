@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import secrets
+
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 from redis.asyncio import Redis
@@ -21,12 +24,37 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 
 
+def _basic_auth_ok(settings: Settings, request: Request) -> bool:
+    """Optional extra layer for a webhook source that can't sign requests the
+    way Meta does (e.g. 360dialog) — HTTP Basic Auth embedded in the webhook
+    URL itself. Blank config (default) = nothing to check = always ok, so
+    this is a strict no-op unless WEBHOOK_BASIC_AUTH_USERNAME/PASSWORD are
+    both set."""
+
+    user = settings.webhook_basic_auth_username
+    pw = settings.webhook_basic_auth_password
+    if not user and not pw:
+        return True
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(header[6:]).decode("utf-8")
+    except Exception:  # noqa: BLE001 - malformed header -> just reject
+        return False
+    got_user, _, got_pw = decoded.partition(":")
+    return secrets.compare_digest(got_user, user) and secrets.compare_digest(got_pw, pw)
+
+
 @router.get("/whatsapp")
 async def verify_webhook(
     request: Request,
     settings: Settings = Depends(get_app_settings),
 ) -> Response:
     """Meta webhook verification handshake."""
+
+    if not _basic_auth_ok(settings, request):
+        return PlainTextResponse("unauthorized", status_code=401)
 
     params = request.query_params
     mode = params.get("hub.mode")
@@ -49,6 +77,9 @@ async def receive_webhook(
     kb=Depends(get_knowledge_base),
     wa_client=Depends(get_wa_client),
 ) -> Response:
+    if not _basic_auth_ok(settings, request):
+        return JSONResponse(status_code=401, content={"status": "unauthorized"})
+
     raw_body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256")
     source_ip = request.client.host if request.client else None

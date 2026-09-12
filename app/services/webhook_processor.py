@@ -172,7 +172,13 @@ class WebhookProcessor:
         # (idempotency is keyed on `processed`, so an unprocessed row is retried).
         await self._session.commit()
 
-        if not signature_valid:
+        # Meta signs every webhook with X-Hub-Signature-256 (HMAC of
+        # meta_app_secret); 360dialog does not (there is no "your Meta app"
+        # holding a secret in that setup) — so this rejection is only
+        # enforced when settings.webhook_signature_required is true (the
+        # default; set false for a 360dialog source). signature_valid is
+        # still recorded on the event either way, for the audit trail.
+        if not signature_valid and self._settings.webhook_signature_required:
             event.processing_error = "invalid signature"
             await self._session.commit()
             logger.warning("webhook rejected: invalid signature", extra=log_extra(ip=source_ip))
