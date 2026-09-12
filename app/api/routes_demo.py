@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -49,6 +50,7 @@ from app.models.enums import (
 from app.models.message import Message
 from app.services import leads as leads_service
 from app.services.conversation.engine import ConversationEngine
+from app.services.outreach import OutreachService
 from app.services.phone import normalize_phone
 from app.services.timeutils import utcnow
 from app.services.windows import WindowService
@@ -76,6 +78,18 @@ class DemoChatResponse(BaseModel):
     booking_detected: bool = False
 
 
+class DemoStartRequest(BaseModel):
+    phone: str = Field(
+        ..., min_length=4, max_length=32,
+        description="any-looking phone; a demo lead is created/reused per number",
+    )
+
+
+class DemoStartResponse(BaseModel):
+    reply: str | None = None
+    action: str  # "sent" | "already_started"
+
+
 def _require_demo_enabled(settings: Settings) -> None:
     if not settings.demo_enabled:
         raise HTTPException(status_code=404, detail="demo UI is disabled (set DEMO_ENABLED=true)")
@@ -92,6 +106,53 @@ def _require_demo_enabled(settings: Settings) -> None:
 async def demo_index(settings: Settings = Depends(get_app_settings)) -> FileResponse:
     _require_demo_enabled(settings)
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@router.post("/start", response_model=DemoStartResponse)
+async def demo_start(
+    payload: DemoStartRequest,
+    settings: Settings = Depends(get_app_settings),
+    session: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+    wa_client=Depends(get_wa_client),
+) -> DemoStartResponse:
+    """Director-fixed opening line (Fix 1): the moment a new demo lead starts,
+    send ``settings.opening_message`` automatically, before the tester has
+    typed anything — mirrors what the ``gate_consent_v1`` template is meant to
+    say in production. A no-op if this lead already has any message (so a
+    page reload never re-sends the opener)."""
+
+    _require_demo_enabled(settings)
+
+    norm = normalize_phone(payload.phone, settings.default_phone_region)
+    lead, created = await leads_service.find_or_create(session, norm, source="demo")
+
+    already_has_messages = (
+        await session.scalar(select(Message.id).where(Message.lead_id == lead.id).limit(1))
+    ) is not None
+    if not created and already_has_messages:
+        return DemoStartResponse(reply=None, action="already_started")
+
+    if lead.lifecycle_state == LifecycleState.NEVER_CONTACTED:
+        lead.lifecycle_state = LifecycleState.ENGAGED
+        lead.first_engaged_at = lead.first_engaged_at or utcnow()
+    if lead.consent_gate != ConsentGate.CLEARED:
+        lead.consent_gate = ConsentGate.CLEARED
+    await WindowService(redis, settings).touch(lead)
+    await session.commit()
+
+    outreach = OutreachService(session, redis, settings, wa_client)
+    message = await outreach.send_text(
+        lead,
+        text=settings.opening_message,
+        reason="demo_opening_message",
+        # "reply"-shaped, not a business-initiated outreach campaign message —
+        # matches how the engine sends its own replies, so it isn't gated on
+        # outreach_require_verified_consent (this demo lead never ran the
+        # real consent-verification flow).
+        purpose="reply",
+    )
+    return DemoStartResponse(reply=message.body, action="sent")
 
 
 @router.post("/chat", response_model=DemoChatResponse)

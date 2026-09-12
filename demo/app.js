@@ -5,6 +5,7 @@
 // the bot sees (score, category, deflect count, etc.) really does carry on.
 
 const CHAT_ENDPOINT = "/demo/chat";
+const START_ENDPOINT = "/demo/start";
 const PHONE_KEY = "stellarDemoPhone";
 
 const els = {
@@ -173,6 +174,28 @@ async function sendMessage(text) {
   }
 }
 
+// Fixed opening line (director review): the bot speaks first, automatically,
+// before the tester types anything. A no-op for a lead that already has
+// messages (e.g. a page reload on the same demo phone), so it never repeats.
+async function startChat(phone) {
+  try {
+    const resp = await fetch(START_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone }),
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.action === "sent" && data.reply) {
+      addBubble(data.reply, "in");
+    }
+  } catch (_) {
+    /* silent — the composer still works even if the opener fails to load */
+  }
+}
+
+startChat(demoPhone);
+
 // --- composer -------------------------------------------------------------
 function autoGrow() {
   els.input.style.height = "auto";
@@ -207,6 +230,7 @@ els.resetBtn.addEventListener("click", () => {
   els.contactPreview.textContent = "online";
   els.lastMsgTime.textContent = "";
   els.input.focus();
+  startChat(demoPhone);
 });
 
 els.input.focus();

@@ -99,3 +99,50 @@ async def test_demo_chat_rejects_bad_payload(conversation_api_client):
         "/demo/chat", json={"phone": "+919812345670", "message": ""}
     )
     assert resp.status_code == 422
+
+
+# --- director review: fixed opening message sent before anything is typed --
+async def test_demo_start_sends_the_fixed_opener_for_a_new_lead(
+    conversation_api_client, session
+):
+    s = _enable_demo(conversation_api_client)
+    resp = await conversation_api_client.post(
+        "/demo/start", json={"phone": "+919812399010"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["action"] == "sent"
+    assert body["reply"] == s.opening_message
+
+    lead = await session.scalar(select(Lead).where(Lead.phone_e164 == "+919812399010"))
+    assert lead is not None
+    assert lead.consent_gate == ConsentGate.CLEARED
+    assert lead.lifecycle_state == LifecycleState.ENGAGED
+
+
+async def test_demo_start_is_a_noop_once_the_lead_has_messages(conversation_api_client):
+    _enable_demo(conversation_api_client)
+    phone = "+919812399011"
+    first = await conversation_api_client.post("/demo/start", json={"phone": phone})
+    assert first.json()["action"] == "sent"
+
+    # a reload / repeated call must never resend the opener
+    second = await conversation_api_client.post("/demo/start", json={"phone": phone})
+    assert second.json() == {"reply": None, "action": "already_started"}
+
+    # nor once the tester has actually started chatting
+    third_phone = "+919812399012"
+    await conversation_api_client.post(
+        "/demo/chat", json={"phone": third_phone, "message": "hi"}
+    )
+    after_chat = await conversation_api_client.post(
+        "/demo/start", json={"phone": third_phone}
+    )
+    assert after_chat.json()["action"] == "already_started"
+
+
+async def test_demo_start_disabled_by_default(conversation_api_client):
+    resp = await conversation_api_client.post(
+        "/demo/start", json={"phone": "+919812345670"}
+    )
+    assert resp.status_code == 404

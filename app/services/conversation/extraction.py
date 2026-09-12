@@ -151,6 +151,32 @@ _PERCENT_NUM = re.compile(
     re.IGNORECASE,
 )
 
+# India vs abroad interest (director review — cycle step 1, answers the fixed
+# opening message). India-only checked first since it can itself contain the
+# word "abroad" ("not interested in abroad").
+_INDIA_ONLY_CUE = re.compile(
+    r"\bonly\b[^.?!]{0,20}\bindia\b|\bindia\b[^.?!]{0,20}\bonly\b|"
+    r"\bnot (?:interested in |going |planning )?abroad\b|"
+    r"\bsirf india\b|\bstay\b[^.?!]{0,20}\bindia\b|\bwithin india\b|"
+    r"\bindia (?:mein|main) hi\b",
+    re.IGNORECASE,
+)
+_ABROAD_CUE = re.compile(
+    r"\b(abroad|outside india|videsh|other countries?|overseas)\b",
+    re.IGNORECASE,
+)
+
+# "Still deciding" on a country — a real answer to the country-decision cycle
+# step, distinct from just not having named one yet (see
+# Lead.country_still_deciding).
+_COUNTRY_UNDECIDED = re.compile(
+    r"\b(still deciding|haven'?t decided|not decided (?:yet|on a country)?|"
+    r"not sure which country|which country (?:is best|should i|would you "
+    r"recommend)|confused (?:between|about) countries|compare countries|"
+    r"not sure about (?:the )?country|no idea which country)\b",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class QualifierExtraction:
@@ -163,6 +189,12 @@ class QualifierExtraction:
     intake_year: int | None = None
     urgency: LeadUrgency | None = None
     parent_in_loop: bool = False
+    # Cycle step 1 (director review): tri-state — None = not answered, True =
+    # abroad (or open to it), False = India-only.
+    considering_abroad: bool | None = None
+    # Cycle step "country decision": a real "still deciding" answer, distinct
+    # from simply not having named a country yet.
+    country_still_deciding: bool = False
     methods: dict[str, str] = field(default_factory=dict)
 
     def any(self) -> bool:
@@ -247,6 +279,14 @@ def _heuristic_category(text: str) -> NeetCategory | None:
     return None
 
 
+def _heuristic_considering_abroad(text: str, country: str | None) -> bool | None:
+    if _INDIA_ONLY_CUE.search(text):
+        return False
+    if country is not None or _ABROAD_CUE.search(text):
+        return True
+    return None
+
+
 def _heuristic_country(text: str) -> str | None:
     lowered = text.lower()
     for needle, canonical in _COUNTRIES:
@@ -294,6 +334,13 @@ def heuristic_extract(text: str, *, speaker: RoleHint) -> QualifierExtraction:
     if country is not None:
         out.target_country = country
         out.methods["target_country"] = "heuristic"
+    abroad = _heuristic_considering_abroad(text, country)
+    if abroad is not None:
+        out.considering_abroad = abroad
+        out.methods["considering_abroad"] = "heuristic"
+    if _COUNTRY_UNDECIDED.search(text):
+        out.country_still_deciding = True
+        out.methods["country_still_deciding"] = "heuristic"
     urg = _heuristic_urgency(text)
     if urg is not None:
         out.urgency = urg
@@ -319,14 +366,20 @@ _LLM_SYSTEM = (
     '"city": "<city or state>", "target_country": "<country>", '
     '"budget_band": "tight|flexible|stated ~<amount>", '
     '"intake_year": <int>, "urgency": "this_intake|next_intake|undecided", '
-    '"parent_in_loop": true}. '
+    '"parent_in_loop": true, "considering_abroad": true|false, '
+    '"country_still_deciding": true}. '
     "If they correct or restate their score, report the corrected number. "
     "neet_category: 'general' for general/unreserved/open; the specific one if "
     "named (obc/sc/st/ews); 'reserved' if they say they are a reserved / "
     "non-general / quota category without saying which. A score for a friend or "
     "sibling is NOT the lead's — omit it. pcb_percentage is their percentage in "
     "Physics+Chemistry+Biology specifically (a separate figure from the NEET "
-    "total score) — only report it if PCB/physics-chemistry-biology was named."
+    "total score) — only report it if PCB/physics-chemistry-biology was named. "
+    "considering_abroad: true if they said they're open to / interested in "
+    "studying abroad (or named a specific country), false if they said they "
+    "only want India — omit if not stated. country_still_deciding: true only "
+    "if they explicitly said they haven't picked a country / want it compared "
+    "for them — omit otherwise."
 )
 
 
@@ -387,6 +440,13 @@ async def extract_qualifiers(
     if data.get("parent_in_loop") is True and not out.parent_in_loop:
         out.parent_in_loop = True
         out.methods["parent_in_loop"] = "llm"
+    abroad = data.get("considering_abroad")
+    if isinstance(abroad, bool) and out.considering_abroad is None:
+        out.considering_abroad = abroad
+        out.methods["considering_abroad"] = "llm"
+    if data.get("country_still_deciding") is True and not out.country_still_deciding:
+        out.country_still_deciding = True
+        out.methods["country_still_deciding"] = "llm"
 
     return out
 
@@ -439,6 +499,12 @@ def apply_to_lead(
     _fill_if_empty("intake_year", extraction.intake_year)
     _update("target_country", extraction.target_country)
     _update("budget_band", extraction.budget_band)
+    # Cycle step 1 (director review): tri-state, so False (India-only) is a
+    # real, meaningful answer — not "empty". Last-stated-wins, like the rest.
+    _update("considering_abroad", extraction.considering_abroad)
+    if extraction.country_still_deciding and not lead.country_still_deciding:
+        lead.country_still_deciding = True
+        changed["country_still_deciding"] = True
     if extraction.urgency is not None and lead.urgency != extraction.urgency:
         lead.urgency = extraction.urgency
         changed["urgency"] = extraction.urgency.value

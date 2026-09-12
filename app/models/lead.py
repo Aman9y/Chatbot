@@ -99,6 +99,27 @@ class Lead(UUIDMixin, TimestampMixin, Base):
     # an out-of-range cost figure — see
     # app/services/guard/guard.py:_check_premature_contact_offer.
     country_discussed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Director review (cycle-as-spine, 2026-09-12): the qualification cycle
+    # (interest -> eligibility -> country -> Rafique Sir) is tracked as
+    # persisted state so it can survive side conversations and never get
+    # re-asked once answered — see app/services/conversation/context.py's
+    # cycle block, and app/services/conversation/extraction.py for how these
+    # are populated. None/False = not yet known; a real answer sets it once.
+    #
+    # Tri-state: None = not asked/answered yet, True = abroad (or open to
+    # it), False = India-only. Answers the fixed opening message.
+    considering_abroad: Mapped[bool | None] = mapped_column(Boolean)
+    # Sticky once true: the lead has said they're still deciding between
+    # countries (not merely "hasn't named one yet") — distinguishes "never
+    # asked" from "asked and answered 'still deciding'" so the still-deciding
+    # comparison content is given once, not re-asked for every turn.
+    country_still_deciding: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Sticky once true: the bot has actually introduced Rafique Sir (by name/
+    # number) to this lead at least once. Computed from real message history
+    # in context.py exactly like country_discussed — drives whether the next
+    # mention uses the full first-time introduction framing or a soft,
+    # engagement-paced resurfacing instead.
+    rafique_introduced: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     target_country: Mapped[str | None] = mapped_column(String(80))
     budget_band: Mapped[str | None] = mapped_column(String(60))
     intake_year: Mapped[int | None] = mapped_column(Integer)

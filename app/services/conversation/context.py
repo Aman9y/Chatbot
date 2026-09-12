@@ -72,8 +72,12 @@ def _profile_summary(lead: Lead) -> str:
         parts.append(f"neet_category={lead.neet_category.value}")
     if lead.pcb_percentage is not None:
         parts.append(f"pcb_percentage={lead.pcb_percentage:g}%")
+    if lead.considering_abroad is not None:
+        parts.append(f"considering_abroad={lead.considering_abroad}")
     if lead.target_country:
         parts.append(f"target_country={lead.target_country}")
+    elif lead.country_still_deciding:
+        parts.append("country_still_deciding=yes")
     if lead.budget_band:
         parts.append(f"budget_band={lead.budget_band}")
     if lead.intake_year:
@@ -223,6 +227,26 @@ async def build_turn_context(
         ):
             lead.country_discussed = True
 
+    # Sticky, computed from real history exactly like country_discussed: has
+    # the bot actually introduced Rafique Sir (by name/number) at least once
+    # already? Decides whether the next mention needs the full first-time
+    # framing or just a soft, engagement-paced resurfacing.
+    if not lead.rafique_introduced and detectors.find_counselor_offer(
+        "\n".join(prior_bot_texts),
+        counselor_name=settings.counselor_name,
+        counselor_phone=settings.counselor_phone,
+        office_address=settings.office_address,
+    ):
+        lead.rafique_introduced = True
+
+    # The guard's own effective country-discussed state (below-cutoff leads are
+    # exempt from the gate — see the GuardContext construction below). Reused
+    # here so the per-turn cycle note never contradicts what the guard will
+    # actually allow.
+    effective_country_discussed = (
+        lead.country_discussed or lead.eligibility_flag is EligibilityFlag.BELOW_CUTOFF
+    )
+
     # Engagement signal (director review): the number should surface on genuine
     # engagement — a real question or follow-through, not a fixed message count.
     # A turn counts as substantive if it matched a real topic (not just small
@@ -261,9 +285,8 @@ async def build_turn_context(
         f"known_profile: {profile}\n"
         f"financing_cleared: {financing}\n"
         f"{_pace_block(pace_plan)}"
-        f"{_country_gate_block(lead)}"
-        f"{_eligibility_block(lead)}"
-        f"{_discovery_block(lead, message_depth)}"
+        f"{_country_gate_block(effective_country_discussed)}"
+        f"{_cycle_block(lead, effective_country_discussed)}"
         f"{_topic_block(topic_match)}"
         f"{_objection_block(objection)}"
         f"{_deflection_block(deflection, settings)}"
@@ -287,13 +310,14 @@ async def build_turn_context(
         counselor_phone=settings.counselor_phone,
         counselor_name=settings.counselor_name,
         office_address=settings.office_address,
-        # Below-cutoff leads have no country left to pick — their path is the
-        # private-India / re-attempt conversation, and offering the call is
-        # the honest next step regardless of country, so the gate doesn't
-        # apply to them.
-        country_discussed=(
-            lead.country_discussed or lead.eligibility_flag is EligibilityFlag.BELOW_CUTOFF
-        ),
+        country_discussed=effective_country_discussed,
+        # FIX 3 (director review): structural backstop against re-asking an
+        # already-answered cycle-step question — see
+        # app/services/guard/guard.py:_check_redundant_question.
+        neet_score_known=lead.neet_score is not None,
+        pcb_percentage_known=lead.pcb_percentage is not None,
+        interest_known=lead.considering_abroad is not None,
+        country_decision_known=bool(lead.target_country) or lead.country_still_deciding,
     )
 
     return TurnContext(
@@ -382,16 +406,18 @@ def _objection_block(o: Objection | None) -> str:
     )
 
 
-def _country_gate_block(lead: Lead) -> str:
+def _country_gate_block(effective_country_discussed: bool) -> str:
     """Enforced state (director review), not a prompt hint: the guard actually
     blocks a draft that mentions the call / director's number / office while
-    ``lead.country_discussed`` is false (see
+    this is still false (see
     app/services/guard/guard.py:_check_premature_contact_offer). This note is
     just the heads-up so the model doesn't waste a regeneration finding that
     out — the real enforcement does not depend on this text being followed.
+    ``effective_country_discussed`` already folds in the below-cutoff
+    exemption, so this note never contradicts what the guard will allow.
     """
 
-    if lead.country_discussed:
+    if effective_country_discussed:
         return ""
     return (
         "\n## GATE — no call, number, or office yet (enforced, not optional)\n"
@@ -405,20 +431,70 @@ def _country_gate_block(lead: Lead) -> str:
     )
 
 
-def _eligibility_block(lead: Lead) -> str:
-    """A persistent open item while eligibility can't be concluded yet. Driven
-    by the tracked ``lead.eligibility_flag`` state, so it resurfaces every turn
-    — however many other topics come and go — until the lead answers.
+_STILL_DECIDING_CONTENT = (
+    "Give this comparison (natural phrasing, but keep this substance):\n"
+    "- Bangladesh — very close to India, but on the costlier side\n"
+    "- Georgia — strong social/campus life\n"
+    "- Russia — similar strengths to Georgia, slightly less on the social side\n"
+    "- Uzbekistan, Kazakhstan, Kyrgyzstan — stable, well-established study "
+    "environments, worth exploring\n"
+    "End this message with a safety/facilities reassurance: separate facilities "
+    "for male and female students, medical/health and security fully handled "
+    "at every location, the student is the priority. Do NOT mention cost here "
+    "unless they specifically ask.\n"
+)
 
-    Two axes, both required (director review): the NEET score cutoff AND the
-    PCB (Physics+Chemistry+Biology) percentage. NEEDS_CATEGORY covers either
-    axis sitting in the band where the reservation category decides it;
-    NEEDS_PCB fires once the NEET-score axis clears but PCB% is still unknown.
+_RAFIQUE_INTRO_CONTENT = (
+    "Introduce him using this framing (natural wording, keep this substance): "
+    "\"our director, Rafique Sir, has 10+ years of experience in this field and "
+    "can guide you better on the exact details — I'm just Stellar AI, an "
+    "assistant. Please reach out to him directly for more specific guidance.\" "
+    "Then give his number, per the contact rules elsewhere in this prompt.\n"
+)
+
+
+def _cycle_block(lead: Lead, effective_country_discussed: bool) -> str:
+    """The qualification cycle — interest -> eligibility -> country -> Rafique
+    Sir — as an ALWAYS-RETURN-TO spine, not a blocking sequence (director
+    review). Exactly one step is "active" per turn: whichever is the next
+    genuinely-unanswered one, driven entirely by tracked lead state (never
+    message-depth alone), so a completed step is never re-asked and survives
+    any number of side questions intact.
+
+    This never tells the model to refuse or defer an unrelated real question —
+    every branch says "after answering whatever they actually asked, weave in
+    ...". The topic-matrix/triage system elsewhere already handles answering
+    the question itself; this block only supplies what to steer back to.
     """
 
+    # India-only: the abroad qualification cycle doesn't apply.
+    if lead.considering_abroad is False:
+        return ""
+
+    # Step 1 — interest (answers the fixed opening message).
+    if lead.considering_abroad is None:
+        return (
+            "\n## CYCLE STEP — interest (India vs abroad)\n"
+            "You don't yet know whether this lead is exploring MBBS abroad, "
+            "MBBS in India, or both — the fixed opening question. After "
+            "answering whatever they actually asked, weave in ONE natural "
+            "version of that question, once per reply, until they answer. "
+            "Don't repeat it if they've already told you in any form.\n"
+        )
+
+    # Step 2 — eligibility: NEET score, then category/PCB (existing, tracked
+    # persistently via lead.eligibility_flag — see app/services/eligibility.py).
+    if lead.eligibility_flag is EligibilityFlag.UNKNOWN:
+        return (
+            "\n## CYCLE STEP — NEET score\n"
+            "You don't know their NEET score yet — the next thing this cycle "
+            "needs. After answering whatever they actually asked, weave in ONE "
+            "natural ask for their NEET score, once per reply, until they "
+            "answer. Don't ask again if a score is already on record.\n"
+        )
     if lead.eligibility_flag is EligibilityFlag.NEEDS_CATEGORY:
         return (
-            "\n## OPEN QUALIFIER — must resolve, do not drop\n"
+            "\n## CYCLE STEP — reservation category (must resolve)\n"
             f"The lead's NEET score ({lead.neet_score}) sits in the band where "
             "whether the abroad route is open depends on their reservation "
             "category (general vs OBC/SC/ST/EWS) — this also decides which PCB "
@@ -434,7 +510,7 @@ def _eligibility_block(lead: Lead) -> str:
         )
     if lead.eligibility_flag is EligibilityFlag.NEEDS_PCB:
         return (
-            "\n## OPEN QUALIFIER — must resolve, do not drop\n"
+            "\n## CYCLE STEP — PCB percentage (must resolve)\n"
             f"The lead's NEET score ({lead.neet_score}) clears the cutoff, but "
             "eligibility for the abroad route needs BOTH the NEET score AND "
             "their PCB (Physics+Chemistry+Biology) percentage — a good NEET "
@@ -448,25 +524,52 @@ def _eligibility_block(lead: Lead) -> str:
             "- This stays open across every other topic until they answer. "
             "Don't badger, but don't let it drop.\n"
         )
-    return ""
-
-
-def _discovery_block(lead: Lead, message_depth: int) -> str:
-    """Director review: proactively ask, early, whether the lead is even
-    considering India or abroad — a discovery question, not just reactive. A
-    light one-turn nudge, not a persistent tracked state like the eligibility
-    blocks above: it only matters while the conversation is still fresh."""
-
-    if message_depth > 2 or lead.target_country:
+    if lead.eligibility_flag is EligibilityFlag.BELOW_CUTOFF:
+        # Diverted entirely — no country left to pick. The static prompt's
+        # "NEET eligibility" section + the guard's below-cutoff exemption
+        # already carry this the rest of the way (honest close, private-India
+        # option, then the call).
         return ""
-    return (
-        "\n## Early discovery — ask once, if it fits\n"
-        "This is a fresh conversation and we don't know yet whether they're "
-        "weighing MBBS in India (private) against going abroad, or already set "
-        "on abroad. If it fits naturally with what they asked, weave in that "
-        "discovery question now — one line, not a separate message, and never "
-        "as a list. Don't force it if they've already told you.\n"
-    )
+
+    # From here eligibility_flag is ABOVE_CUTOFF.
+
+    # Step 3 — country decision: ask once, then never again.
+    if not lead.target_country and not lead.country_still_deciding:
+        return (
+            "\n## CYCLE STEP — country decision\n"
+            "Eligibility is confirmed. Next, find out whether they've already "
+            "decided on a country or are still deciding between a few. After "
+            "answering whatever they actually asked, weave in ONE natural ask "
+            "about this, once per reply, until they answer.\n"
+        )
+
+    # Step 3b — deliver the content once (until a real back-and-forth has
+    # happened — effective_country_discussed is that same tracked signal).
+    if not effective_country_discussed:
+        if lead.target_country:
+            return (
+                f"\n## CYCLE STEP — country: {lead.target_country} (decided)\n"
+                f"They've settled on {lead.target_country}. Name it, then give "
+                "the confirmed government college list for it from the "
+                "knowledge snippets below (never invent a name beyond what's "
+                "listed), then close with: \"We're also open to any specific "
+                "college you have in mind — happy to look into that too.\"\n"
+            )
+        return "\n## CYCLE STEP — country: still deciding\n" + _STILL_DECIDING_CONTENT
+
+    # Step 4 — Rafique Sir introduction (only reachable once
+    # effective_country_discussed is true, i.e. the guard will actually allow
+    # it) — exact first-time framing, once.
+    if not lead.rafique_introduced:
+        return (
+            "\n## CYCLE STEP — introduce Rafique Sir (first time, use this framing)\n"
+            + _RAFIQUE_INTRO_CONTENT
+        )
+
+    # Cycle complete. Hand off entirely to the normal pace/CTA system above —
+    # it already re-surfaces Rafique Sir at natural, engagement-paced moments
+    # (soft/direct CTA notes) without a separate mechanism here.
+    return ""
 
 
 def _deflection_block(plan: DeflectionPlan | None, settings: Settings) -> str:

@@ -497,3 +497,56 @@ def find_counselor_offer(
 
     hits += _CTA_PHRASES.findall(t)
     return hits
+
+
+# --- redundant cycle-step questions (director review FIX 3) -----------------
+# Deliberately narrow — a question mark plus an unambiguous cue for that exact
+# fact — so a merely-related sentence ("your NEET score of 250 is solid") is
+# never mistaken for asking the question again.
+
+_ASKS_NEET_SCORE = re.compile(
+    r"\bneet\b[^.?!]{0,25}\bscore\b[^.?!]{0,15}\?|"
+    r"\bscore\b[^.?!]{0,15}\bneet\b[^.?!]{0,15}\?|"
+    r"\bwhat(?:'?s| is| was| did you)\b[^.?!]{0,20}\bneet\b[^.?!]{0,20}\?",
+    re.IGNORECASE,
+)
+_ASKS_PCB_PERCENTAGE = re.compile(
+    r"\bpcb\b[^.?!]{0,25}(?:percent|percentage|%)[^.?!]{0,15}\?|"
+    r"(?:percent|percentage)[^.?!]{0,25}\bpcb\b[^.?!]{0,15}\?",
+    re.IGNORECASE,
+)
+_ASKS_INTEREST = re.compile(
+    r"\b(?:india|abroad)\b[^.?!]{0,20}\b(?:or|vs\.?|versus)\b[^.?!]{0,20}"
+    r"\b(?:india|abroad)\b[^.?!]{0,15}\?",
+    re.IGNORECASE,
+)
+_ASKS_COUNTRY_DECISION = re.compile(
+    r"\bdecided\b[^.?!]{0,20}\bcountry\b[^.?!]{0,15}\?|"
+    r"\bcountry\b[^.?!]{0,20}\bdecided\b[^.?!]{0,15}\?|"
+    r"\b(?:still deciding|already decided)\b[^.?!]{0,25}\bcountry\b[^.?!]{0,15}\?|"
+    r"\bcountry\b[^.?!]{0,15}\b(?:still deciding|already decided)\b[^.?!]{0,15}\?",
+    re.IGNORECASE,
+)
+
+
+def find_redundant_question(
+    text: str,
+    *,
+    neet_score_known: bool = False,
+    pcb_percentage_known: bool = False,
+    interest_known: bool = False,
+    country_decision_known: bool = False,
+) -> str | None:
+    """The single most specific already-answered question this reply asks
+    again, or None. Checked only against facts the caller says are already
+    known on the lead — never guesses at what "known" means itself."""
+
+    if neet_score_known and _ASKS_NEET_SCORE.search(text):
+        return "neet_score"
+    if pcb_percentage_known and _ASKS_PCB_PERCENTAGE.search(text):
+        return "pcb_percentage"
+    if interest_known and _ASKS_INTEREST.search(text):
+        return "india_vs_abroad_interest"
+    if country_decision_known and _ASKS_COUNTRY_DECISION.search(text):
+        return "country_decision"
+    return None

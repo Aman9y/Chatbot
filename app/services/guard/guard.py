@@ -59,6 +59,14 @@ class GuardContext:
     # this concern) is unaffected — production wiring passes the lead's real,
     # persistent ``country_discussed`` state.
     country_discussed: bool = True
+    # FIX 3 (director review): structural, not prompt-only. True once the
+    # corresponding cycle-step fact is already known on the lead — see
+    # app/services/conversation/context.py. Defaults False (permissive): a
+    # caller that never sets these never trips the redundant-question check.
+    neet_score_known: bool = False
+    pcb_percentage_known: bool = False
+    interest_known: bool = False
+    country_decision_known: bool = False
 
 
 @dataclass
@@ -106,6 +114,7 @@ class ResponseGuard:
         violations += self._check_pg_cost(text)
         violations += self._check_meta_leak(text)
         violations += self._check_premature_contact_offer(text, ctx)
+        violations += self._check_redundant_question(text, ctx)
 
         return GuardVerdict(allowed=not violations, violations=violations, checked_text=text)
 
@@ -430,6 +439,33 @@ class ResponseGuard:
                     "real country discussion has happened with this lead — "
                     "discuss a specific country first (enforced state, see "
                     "Lead.country_discussed)",
+                )
+            ]
+        return []
+
+    def _check_redundant_question(self, text: str, ctx: GuardContext) -> list[Violation]:
+        """FIX 3 (director review): structural backstop, not prompt-only. If
+        the reply asks a cycle-step question (NEET score, PCB%, India-vs-
+        abroad interest, country decision) that is already answered on the
+        lead, block and regenerate — the same mechanism as every other rule
+        here. Deliberately narrow detectors (see detectors.find_redundant_
+        question) so this only catches a clear, direct re-ask, never a
+        passing mention of the same words."""
+
+        hit = detectors.find_redundant_question(
+            text,
+            neet_score_known=ctx.neet_score_known,
+            pcb_percentage_known=ctx.pcb_percentage_known,
+            interest_known=ctx.interest_known,
+            country_decision_known=ctx.country_decision_known,
+        )
+        if hit:
+            return [
+                Violation(
+                    "redundant_question",
+                    hit,
+                    f"asks for {hit} again — already known on this lead, don't "
+                    "re-ask it",
                 )
             ]
         return []

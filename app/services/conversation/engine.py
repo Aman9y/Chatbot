@@ -99,6 +99,8 @@ _REGEN_HINTS = {
         "number, or the office — a real country discussion has to happen "
         "with this lead first. Focus this reply on discussing a specific "
         "country instead.",
+    "redundant_question": "That fact is already known on this lead — remove "
+        "the question and move on to whatever's actually next.",
 }
 
 

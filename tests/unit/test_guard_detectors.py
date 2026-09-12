@@ -278,3 +278,41 @@ def test_find_counselor_offer_negative(text):
         office_address="12 MG Road, Pune",
     )
     assert not hits, (text, hits)
+
+
+# --- director review FIX 3: structural redundant-question detection --------
+@pytest.mark.parametrize(
+    "text,kwargs",
+    [
+        ("What's your NEET score?", dict(neet_score_known=True)),
+        ("Sorry, what did you score in NEET?", dict(neet_score_known=True)),
+        ("What was your PCB percentage?", dict(pcb_percentage_known=True)),
+        ("What's your PCB percent?", dict(pcb_percentage_known=True)),
+        (
+            "Are you looking at India or abroad?",
+            dict(interest_known=True),
+        ),
+        (
+            "Have you decided on a country, or still deciding?",
+            dict(country_decision_known=True),
+        ),
+    ],
+)
+def test_find_redundant_question_positive(text, kwargs):
+    assert detectors.find_redundant_question(text, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "text,kwargs",
+    [
+        # same question, but the fact is NOT known -> not redundant
+        ("What's your NEET score?", dict(neet_score_known=False)),
+        # a passing mention, not a re-ask
+        ("Your NEET score of 250 is a solid score.", dict(neet_score_known=True)),
+        ("Your PCB percentage of 60% clears the cutoff.", dict(pcb_percentage_known=True)),
+        ("Georgia has strong campus life.", dict(country_decision_known=True)),
+        ("We help students explore MBBS abroad.", dict(interest_known=True)),
+    ],
+)
+def test_find_redundant_question_negative(text, kwargs):
+    assert not detectors.find_redundant_question(text, **kwargs)

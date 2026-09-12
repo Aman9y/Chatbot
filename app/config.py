@@ -173,6 +173,21 @@ class Settings(BaseSettings):
     consent_ask_template_name: str = "gate_consent_v1"
     consent_ask_template_language: str = "en"
     consent_ask_template_category: str = "marketing"
+    # Director-fixed opening line (2026-09-12) — single source of truth for
+    # "what the very first message says". Used directly by the /demo UI (sent
+    # automatically before the tester types anything). In PRODUCTION this text
+    # IS meant to be the `gate_consent_v1` WhatsApp template's content above —
+    # but that template's actual content lives in Meta Business Manager, not
+    # in this codebase, and WhatsApp requires a template to be RE-APPROVED any
+    # time its content changes. Nothing in this codebase can push that update
+    # or approval for you: someone with Meta Business Manager access has to
+    # edit the gate_consent_v1 template to match this text and resubmit it,
+    # and it cannot go live until Meta approves the new version.
+    opening_message: str = (
+        "Hi! I'm Stellar AI from Stellar Educonsultancy. Are you interested in "
+        "exploring MBBS abroad or MBBS in India for your future UG medical "
+        "studies? If yes, we're here to help anytime!"
+    )
     # WABA warm-up: how many opt-in asks one sweep tick sends (a natural drip).
     consent_asks_per_sweep: int = 25
     # Resend the opt-in ask this many times (spaced) before giving up -> DORMANT.

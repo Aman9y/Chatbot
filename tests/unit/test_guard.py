@@ -481,3 +481,38 @@ def test_informational_counsellor_reference_not_treated_as_an_offer(guard):
         context=_ctx(country_discussed=False),
     )
     assert v.allowed, v.rules
+
+
+# --- director review FIX 3: redundant-question guard rule -------------------
+def test_redundant_neet_score_question_blocked(guard):
+    v = guard.check(
+        "Great! What's your NEET score, by the way?",
+        context=_ctx(neet_score_known=True),
+    )
+    assert not v.allowed
+    assert "redundant_question" in v.rules
+
+
+def test_neet_score_question_allowed_when_not_yet_known(guard):
+    v = guard.check(
+        "Great! What's your NEET score, by the way?",
+        context=_ctx(neet_score_known=False),
+    )
+    assert v.allowed, v.rules
+
+
+def test_redundant_country_decision_question_blocked(guard):
+    v = guard.check(
+        "Just to check — have you decided on a country, or still deciding?",
+        context=_ctx(country_decision_known=True),
+    )
+    assert not v.allowed
+    assert "redundant_question" in v.rules
+
+
+def test_stating_a_known_score_positively_is_never_blocked(guard):
+    v = guard.check(
+        "250 is a solid score! Let's talk about which country fits you.",
+        context=_ctx(neet_score_known=True, country_discussed=True),
+    )
+    assert v.allowed, v.rules

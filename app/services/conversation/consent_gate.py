@@ -39,11 +39,10 @@ def _bot(settings: Settings) -> str:
 
 
 def consent_ask(settings: Settings) -> str:
-    return (
-        f"Hi, I'm {_bot(settings)} from {_company(settings)} — we help students "
-        "who've appeared for NEET explore MBBS abroad options. Would you like to "
-        "hear more?"
-    )
+    # Director-fixed (2026-09-12): settings.opening_message is the single
+    # source of truth for this copy — see its definition in config.py for the
+    # production template-approval note.
+    return settings.opening_message
 
 
 def consent_reask(settings: Settings) -> str:
