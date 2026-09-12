@@ -14,7 +14,7 @@ import redis.asyncio as redis_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import get_settings
-from app.logging_config import configure_logging, get_logger
+from app.logging_config import configure_logging, get_logger, log_extra
 from app.scheduler.celery_app import celery_app
 from app.services.conversation.dispatch import LockUnavailable, TurnDeps, run_lead_turn
 from app.services.knowledge.yaml_kb import load_knowledge_base
@@ -78,13 +78,54 @@ async def _run(lead_id: str) -> dict:
     max_retries=None,
 )
 def process_lead_turn(self, lead_id: str) -> dict:
+    """Every path out of this task logs one unambiguous final line — sent,
+    blocked/fallback, skipped, or failed — so a Celery worker log is never
+    silent on what happened to a lead's turn. Before this, an exception
+    anywhere in ``_run`` (building the WhatsApp/LLM client, the DB session,
+    the engine itself) propagated out of the task with nothing beyond
+    Celery's own "received" line to show for it in practice — this makes
+    that outcome impossible: every branch below logs before returning or
+    re-raising.
+    """
+
     settings = get_settings()
+    logger.info("process_lead_turn started", extra=log_extra(lead=lead_id))
     try:
-        return asyncio.run(_run(lead_id))
+        result = asyncio.run(_run(lead_id))
     except LockUnavailable as exc:
-        logger.info("turn lock busy for lead %s; retrying", lead_id)
+        logger.info(
+            "process_lead_turn: lock busy, retrying",
+            extra=log_extra(lead=lead_id),
+        )
         raise self.retry(
             exc=exc,
             countdown=settings.turn_lock_retry_seconds,
             max_retries=settings.turn_lock_max_retries,
         ) from exc
+    except Exception as exc:
+        # The catch-all: whatever broke (missing WhatsApp client env var,
+        # DB/Redis unreachable, an LLM call, the outbound send, anything
+        # else) is logged here with the full traceback and the lead id,
+        # then re-raised so Celery's own retry/failure bookkeeping (task
+        # state, max_retries semantics elsewhere) still applies unchanged.
+        logger.error(
+            "process_lead_turn FAILED: %s: %s",
+            type(exc).__name__,
+            exc,
+            extra=log_extra(lead=lead_id, error_type=type(exc).__name__),
+            exc_info=True,
+        )
+        raise
+
+    logger.info(
+        "process_lead_turn finished: action=%s skipped_reason=%s booking=%s",
+        result.get("action"),
+        result.get("skipped_reason"),
+        result.get("booking"),
+        extra=log_extra(
+            lead=lead_id,
+            action=result.get("action"),
+            skipped_reason=result.get("skipped_reason"),
+        ),
+    )
+    return result
