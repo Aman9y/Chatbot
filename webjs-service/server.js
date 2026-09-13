@@ -147,12 +147,47 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ─── clean stale Chromium locks ───────────────────────────────────────────────
+/**
+ * When Chromium crashes or a Docker container restarts, Chromium leaves behind
+ * SingletonLock, SingletonCookie, and SingletonSocket in the profile directory.
+ * On subsequent boots with persistent volumes, Chromium detects the old hostname and refuses to launch:
+ * "The profile appears to be in use by another Chromium process... on another computer"
+ * This helper recursively removes any stale Singleton* files before launching Puppeteer.
+ */
+function cleanStaleLocks(dirPath) {
+  try {
+    if (!fs.existsSync(dirPath)) return;
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        cleanStaleLocks(fullPath);
+      } else if (entry.name.startsWith('Singleton')) {
+        try {
+          fs.unlinkSync(fullPath);
+          console.log(`[webjs] Removed stale Chromium lock file: ${fullPath}`);
+        } catch (e) {
+          console.warn(`[webjs] Could not remove lock file ${fullPath}:`, e.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[webjs] Error cleaning stale locks in ${dirPath}:`, err.message);
+  }
+}
+
 // ─── WhatsApp client ──────────────────────────────────────────────────────────
 let waState = 'INITIALIZING';
 let waClient = null;
 let lastQrString = null;  // stored so /qr endpoint can serve it
 
 function initWhatsAppClient() {
+  // Auto-clean stale locks before starting Chromium
+  cleanStaleLocks(AUTH_PATH);
+  cleanStaleLocks(path.resolve('./.wwebjs_auth'));
+  cleanStaleLocks('/data');
+
   // Use system Chromium (installed by Dockerfile) when available on Railway.
   const puppeteerArgs = {
     headless: true,
