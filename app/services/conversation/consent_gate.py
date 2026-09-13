@@ -23,7 +23,7 @@ import re
 from typing import Literal
 
 from app.config import Settings
-from app.services.llm.base import LLMClient, LLMMessage
+from app.services.llm.base import LLMClient, LLMMessage, complete_with_timeout
 
 OptInVerdict = Literal["yes", "no", "unclear"]
 AgeVerdict = Literal["adult", "minor", "unclear"]
@@ -191,11 +191,14 @@ async def _classify(
     llm: LLMClient | None,
     model: str | None,
     use_llm: bool,
+    timeout: float | None = None,
 ) -> str | None:
     if not (use_llm and llm is not None and model and text.strip()):
         return None
     try:
-        resp = await llm.complete(
+        resp = await complete_with_timeout(
+            llm,
+            timeout=timeout,
             system=system,
             messages=[LLMMessage(role="user", content=text[:600])],
             model=model,
@@ -216,6 +219,7 @@ async def interpret_optin_reply(
     llm: LLMClient | None = None,
     model: str | None = None,
     use_llm: bool = False,
+    timeout: float | None = None,
 ) -> OptInVerdict:
     heuristic = heuristic_optin(text)
     if heuristic != "unclear":
@@ -227,6 +231,7 @@ async def interpret_optin_reply(
         llm=llm,
         model=model,
         use_llm=use_llm,
+        timeout=timeout,
     )
     return llm_answer or "unclear"  # never default to yes
 
@@ -237,6 +242,7 @@ async def interpret_age_reply(
     llm: LLMClient | None = None,
     model: str | None = None,
     use_llm: bool = False,
+    timeout: float | None = None,
 ) -> AgeVerdict:
     heuristic = heuristic_age(text)
     if heuristic != "unclear":
@@ -248,6 +254,7 @@ async def interpret_age_reply(
         llm=llm,
         model=model,
         use_llm=use_llm,
+        timeout=timeout,
     )
     return llm_answer or "unclear"  # never default to adult
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from app.config import Settings
@@ -8,8 +10,10 @@ from app.models.lead import Lead
 from app.services.conversation.extraction import (
     QualifierExtraction,
     apply_to_lead,
+    extract_qualifiers,
     heuristic_extract,
 )
+from tests.helpers import HangingLLMClient
 
 
 @pytest.mark.parametrize(
@@ -209,3 +213,26 @@ def test_generic_reserved_does_not_overwrite_a_specific_relaxed_category():
     # but a real correction to another specific one wins
     apply_to_lead(lead, QualifierExtraction(neet_category=NeetCategory.ST), s)
     assert lead.neet_category == NeetCategory.ST
+
+
+async def test_extract_qualifiers_times_out_instead_of_hanging():
+    """Production incident (2026-09-12, task 9c1a6ae2): a Celery turn hung with
+    no error at all — this call site was one of the unwrapped ones. A hanging
+    LLM call must be cut short by `timeout`; extraction then falls back to the
+    heuristic-only result rather than propagating the timeout (extraction is
+    documented to "never fail the turn")."""
+
+    llm = HangingLLMClient(delay_seconds=3600.0)
+    start = time.monotonic()
+    result = await extract_qualifiers(
+        "I got 240 in NEET, thinking about Georgia",
+        speaker=RoleHint.STUDENT,
+        llm=llm,
+        model="fake",
+        use_llm=True,
+        timeout=0.05,
+    )
+    elapsed = time.monotonic() - start
+    assert elapsed < 5.0, "extract_qualifiers waited far longer than the configured timeout"
+    assert llm.calls == 1
+    assert result.neet_score == 240  # the heuristic pass still ran

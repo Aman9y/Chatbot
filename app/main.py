@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-import redis.asyncio as redis_asyncio
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -15,6 +14,7 @@ from app.api.routes_health import router as health_router
 from app.api.routes_webhook import router as webhook_router
 from app.config import get_settings
 from app.logging_config import configure_logging, get_logger
+from app.redis_client import build_redis_client
 from app.services.knowledge.yaml_kb import load_knowledge_base
 from app.services.llm.factory import build_llm_client
 from app.services.whatsapp.factory import build_whatsapp_client
@@ -28,14 +28,7 @@ async def lifespan(app: FastAPI):
     configure_logging(level=settings.log_level, json_output=settings.log_json)
 
     app.state.settings = settings
-    app.state.redis = redis_asyncio.from_url(
-        settings.redis_url,
-        decode_responses=True,
-        socket_connect_timeout=5,
-        socket_keepalive=True,
-        health_check_interval=30,
-        retry_on_timeout=True,
-    )
+    app.state.redis = build_redis_client(settings)
     app.state.wa_client = build_whatsapp_client(settings)
     app.state.llm_client = build_llm_client(settings)
     app.state.knowledge_base = load_knowledge_base(settings.kb_path, strict=True)

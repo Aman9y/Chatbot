@@ -10,11 +10,12 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-import redis.asyncio as redis_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.config import get_settings
+from app.db.session import build_async_engine
 from app.logging_config import configure_logging, get_logger, log_extra
+from app.redis_client import build_redis_client
 from app.scheduler.celery_app import celery_app
 from app.services.conversation.dispatch import LockUnavailable, TurnDeps, run_lead_turn
 from app.services.knowledge.yaml_kb import load_knowledge_base
@@ -29,16 +30,8 @@ async def _turn_deps():
     settings = get_settings()
     configure_logging(level=settings.log_level, json_output=settings.log_json)
 
-    engine = create_async_engine(
-        settings.database_url,
-        pool_pre_ping=True,
-        connect_args=(
-            {"check_same_thread": False}
-            if settings.database_url.startswith("sqlite")
-            else {}
-        ),
-    )
-    redis = redis_asyncio.from_url(settings.redis_url, decode_responses=True)
+    engine = build_async_engine(settings)
+    redis = build_redis_client(settings)
     wa_client = build_whatsapp_client(settings)
     llm = build_llm_client(settings)
     kb = load_knowledge_base(settings.kb_path, strict=True)

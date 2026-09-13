@@ -13,4 +13,8 @@ def build_whatsapp_client(settings: Settings) -> WhatsAppClient:
         from app.services.whatsapp.dialog360 import Dialog360WhatsAppClient
 
         return Dialog360WhatsAppClient(settings)
+    if settings.whatsapp_client == "webjs":
+        from app.services.whatsapp.webjs import WebJSWhatsAppClient
+
+        return WebJSWhatsAppClient(settings)
     return FakeWhatsAppClient()

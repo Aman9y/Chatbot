@@ -19,7 +19,7 @@ from app.config import Settings
 from app.models.enums import LeadUrgency, NeetCategory, RoleHint
 from app.models.lead import Lead
 from app.services.eligibility import compute_eligibility
-from app.services.llm.base import LLMClient, LLMMessage
+from app.services.llm.base import LLMClient, LLMMessage, complete_with_timeout
 from app.services.timeutils import utcnow
 
 _SPECIFIC_RELAXED = frozenset(
@@ -390,6 +390,7 @@ async def extract_qualifiers(
     llm: LLMClient | None = None,
     model: str | None = None,
     use_llm: bool = False,
+    timeout: float | None = None,
 ) -> QualifierExtraction:
     out = heuristic_extract(text, speaker=speaker)
 
@@ -397,7 +398,9 @@ async def extract_qualifiers(
         return out
 
     try:
-        resp = await llm.complete(
+        resp = await complete_with_timeout(
+            llm,
+            timeout=timeout,
             system=_LLM_SYSTEM,
             messages=[LLMMessage(role="user", content=text[:1200])],
             model=model,

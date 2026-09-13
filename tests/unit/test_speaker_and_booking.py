@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from app.models.enums import RoleHint
@@ -5,6 +7,7 @@ from app.services.conversation.booking import detect_booking, heuristic_booking
 from app.services.conversation.speaker import detect_speaker, heuristic_speaker
 from app.services.llm.base import LLMMessage
 from app.services.llm.fake import FakeLLMClient
+from tests.helpers import HangingLLMClient
 
 
 @pytest.mark.parametrize(
@@ -34,6 +37,29 @@ async def test_detect_speaker_uses_llm_when_unsure():
     )
     assert role == RoleHint.PARENT
     assert method == "llm"
+
+
+async def test_detect_speaker_times_out_instead_of_hanging():
+    """Production incident (2026-09-12, task 9c1a6ae2): a Celery turn hung with
+    no error at all — traced to this call site (among others) having no timeout.
+    A hanging LLM call must be cut short by `timeout`, not awaited forever; the
+    function then falls back gracefully rather than propagating the timeout
+    (speaker detection is documented to "never fail the turn")."""
+
+    llm = HangingLLMClient(delay_seconds=3600.0)
+    start = time.monotonic()
+    role, method = await detect_speaker(
+        "hello, following up on the enquiry",
+        llm=llm,
+        model="fake",
+        use_llm=True,
+        timeout=0.05,
+    )
+    elapsed = time.monotonic() - start
+    assert elapsed < 5.0, "detect_speaker waited far longer than the configured timeout"
+    assert llm.calls == 1
+    assert role == RoleHint.UNKNOWN
+    assert method == "prior"
 
 
 @pytest.mark.parametrize(
@@ -86,3 +112,22 @@ async def test_detect_booking_negative():
         use_llm=True,
     )
     assert not sig.detected
+
+
+async def test_detect_booking_times_out_instead_of_hanging():
+    """Same production incident as test_detect_speaker_times_out_instead_of_hanging
+    — booking detection is another of the previously-unwrapped call sites."""
+
+    llm = HangingLLMClient(delay_seconds=3600.0)
+    start = time.monotonic()
+    sig = await detect_booking(
+        [LLMMessage(role="user", content="sounds interesting, tell me more")],
+        llm=llm,
+        model="fake",
+        use_llm=True,
+        timeout=0.05,
+    )
+    elapsed = time.monotonic() - start
+    assert elapsed < 5.0, "detect_booking waited far longer than the configured timeout"
+    assert llm.calls == 1
+    assert sig.detected is False

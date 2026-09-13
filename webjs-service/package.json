@@ -1,0 +1,20 @@
+{
+  "name": "mbbs-webjs-service",
+  "version": "1.0.0",
+  "description": "Temporary whatsapp-web.js bridge for MBBS Lead Bot (isolated, 250-recipient cap).",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.26.0",
+    "express": "^4.19.0",
+    "axios": "^1.7.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

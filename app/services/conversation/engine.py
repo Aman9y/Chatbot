@@ -58,7 +58,7 @@ from app.services.guard.fallback import is_hindi, safe_fallback_message
 from app.services.guard.guard import GuardVerdict, ResponseGuard
 from app.services.handoff import notify_counselor
 from app.services.knowledge.base import KnowledgeBase
-from app.services.llm.base import LLMClient, LLMMessage
+from app.services.llm.base import LLMClient, LLMMessage, complete_with_timeout
 from app.services.llm.factory import classifier_model, reply_model
 from app.services.outreach import OutreachService
 from app.services.timeutils import utcnow
@@ -342,6 +342,7 @@ class ConversationEngine:
             llm=self._llm,
             model=classifier_model(s),
             use_llm=(s.llm_provider != "fake"),
+            timeout=s.llm_timeout_seconds,
         )
         if speaker != RoleHint.UNKNOWN and lead.role_hint == RoleHint.UNKNOWN:
             lead.role_hint = speaker
@@ -358,6 +359,7 @@ class ConversationEngine:
                 llm=self._llm,
                 model=classifier_model(s),
                 use_llm=(s.llm_provider != "fake"),
+                timeout=s.llm_timeout_seconds,
             )
             qualifier_changes = apply_to_lead(lead, extraction, s)
         except Exception:  # noqa: BLE001 - extraction is best-effort
@@ -439,6 +441,7 @@ class ConversationEngine:
                 llm=self._llm,
                 model=classifier_model(s),
                 use_llm=(s.llm_provider != "fake"),
+                timeout=s.llm_timeout_seconds,
             )
         trace.booking_detected = booking.detected
         trace.booking_details = {
@@ -568,7 +571,7 @@ class ConversationEngine:
                     lead, trace, gate_copy.age_ask(s), "gate_age_ask"
                 )
             verdict = await interpret_optin_reply(
-                text, llm=self._llm, model=model, use_llm=use_llm
+                text, llm=self._llm, model=model, use_llm=use_llm, timeout=s.llm_timeout_seconds
             )
             self._gate_signal(trace, "opt_in", verdict, lead.gate_reask_count)
             if verdict == "yes":
@@ -584,13 +587,13 @@ class ConversationEngine:
 
         # PENDING_AGE — a clear "no / not interested" here still opts the lead out
         if await interpret_optin_reply(
-            text, llm=self._llm, model=model, use_llm=use_llm
+            text, llm=self._llm, model=model, use_llm=use_llm, timeout=s.llm_timeout_seconds
         ) == "no":
             self._gate_signal(trace, "age", "declined", lead.gate_reask_count)
             return await self._gate_decline(lead, inbound_message, trace, text)
 
         verdict = await interpret_age_reply(
-            text, llm=self._llm, model=model, use_llm=use_llm
+            text, llm=self._llm, model=model, use_llm=use_llm, timeout=s.llm_timeout_seconds
         )
         self._gate_signal(trace, "age", verdict, lead.gate_reask_count)
         if verdict == "adult":
@@ -779,7 +782,9 @@ class ConversationEngine:
         latency = 0.0
 
         for attempt in range(s.guard_regenerate_attempts + 1):
-            resp = await self._llm.complete(
+            resp = await complete_with_timeout(
+                self._llm,
+                timeout=s.llm_timeout_seconds,
                 system=turn.system_prompt,
                 messages=messages,
                 model=reply_model(s),

@@ -11,7 +11,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from app.services.llm.base import LLMClient, LLMMessage
+from app.services.llm.base import LLMClient, LLMMessage, complete_with_timeout
 
 _ACCEPT = re.compile(
     r"\b(ok(ay)? (call|book|schedule|let'?s)|yes,? (call|book|please call|let'?s|do)|"
@@ -61,6 +61,7 @@ async def detect_booking(
     llm: LLMClient | None = None,
     model: str | None = None,
     use_llm: bool = True,
+    timeout: float | None = None,
 ) -> BookingSignal:
     last_user = next((m.content for m in reversed(recent_turns) if m.role == "user"), "")
     heuristic = heuristic_booking(last_user)
@@ -72,7 +73,9 @@ async def detect_booking(
 
     transcript = "\n".join(f"{m.role}: {m.content}" for m in recent_turns[-6:])
     try:
-        resp = await llm.complete(
+        resp = await complete_with_timeout(
+            llm,
+            timeout=timeout,
             system=(
                 "You read a short WhatsApp transcript between an MBBS-abroad "
                 "consultancy bot and a lead. Decide if, in the latest lead message, "

@@ -6,11 +6,12 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 
-import redis.asyncio as redis_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.config import get_settings
+from app.db.session import build_async_engine
 from app.logging_config import configure_logging, get_logger
+from app.redis_client import build_redis_client
 from app.scheduler.locks import SweepLock
 from app.scheduler.sweeps import SweepDeps, SweepResult
 from app.services.whatsapp.factory import build_whatsapp_client
@@ -26,14 +27,8 @@ async def sweep_deps():
     settings = get_settings()
     configure_logging(level=settings.log_level, json_output=settings.log_json)
 
-    engine = create_async_engine(
-        settings.database_url,
-        pool_pre_ping=True,
-        connect_args=(
-            {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-        ),
-    )
-    redis = redis_asyncio.from_url(settings.redis_url, decode_responses=True)
+    engine = build_async_engine(settings)
+    redis = build_redis_client(settings)
     wa_client = build_whatsapp_client(settings)
     session_factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
     try:

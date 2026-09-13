@@ -35,9 +35,20 @@ class Settings(BaseSettings):
     # --- datastores ------------------------------------------------------
     database_url: str = "postgresql+asyncpg://chatbot:chatbot@localhost:5432/chatbot"
     redis_url: str = "redis://localhost:6379/0"
+    # Production incident (2026-09-12): a Celery turn task hung indefinitely
+    # with no timeout anywhere in its DB/Redis clients — only the LLM and
+    # WhatsApp-send calls had one. asyncpg's own default is "connect within
+    # 60s, then no limit at all on how long a query may run"; redis-py's
+    # default is no socket timeout at all. These bound both, everywhere a
+    # client is built (app/db/session.py, app/redis_client.py) — a stuck
+    # connection now fails loudly within seconds instead of hanging forever.
+    db_connect_timeout_seconds: float = 10.0
+    db_command_timeout_seconds: float = 30.0
+    redis_connect_timeout_seconds: float = 5.0
+    redis_socket_timeout_seconds: float = 10.0
 
     # --- Meta WhatsApp Cloud API ---------------------------------------------
-    whatsapp_client: Literal["fake", "meta", "360dialog"] = "fake"
+    whatsapp_client: Literal["fake", "meta", "360dialog", "webjs"] = "fake"
     meta_app_secret: str = ""
     meta_verify_token: str = "dev-verify-token"
     meta_access_token: str = ""
@@ -56,6 +67,17 @@ class Settings(BaseSettings):
     # see app/services/whatsapp/dialog360.py.
     d360_api_key: str = ""
     d360_base_url: str = "https://waba-v2.360dialog.io"
+
+    # --- whatsapp-web.js bridge (temporary; WHATSAPP_CLIENT=webjs) --------------
+    # Internal URL of the companion Node.js webjs-service.
+    # On Railway: http://<service-name>.railway.internal:<port>
+    webjs_service_url: str = "http://localhost:3001"
+    # Shared secret between the Python app and the Node webjs-service.
+    # Must match WEBJS_API_SECRET on the Node side.
+    webjs_api_secret: str = ""
+    # Maximum unique outbound recipients for the webjs client.
+    # Hard ceiling is 250 — raising above it requires a source-code change.
+    webjs_max_recipients: int = 250
 
     # --- inbound webhook security --------------------------------------------
     # Meta signs every webhook POST with X-Hub-Signature-256 (HMAC of

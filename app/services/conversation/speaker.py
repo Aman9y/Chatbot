@@ -11,7 +11,7 @@ import json
 import re
 
 from app.models.enums import RoleHint
-from app.services.llm.base import LLMClient, LLMMessage
+from app.services.llm.base import LLMClient, LLMMessage, complete_with_timeout
 
 _PARENT_CUES = re.compile(
     r"\b(my (son|daughter|child|kid|beta|beti|ward)|as a (parent|father|mother)|"
@@ -48,6 +48,7 @@ async def detect_speaker(
     llm: LLMClient | None = None,
     model: str | None = None,
     use_llm: bool = False,
+    timeout: float | None = None,
 ) -> tuple[RoleHint, str]:
     role, confidence = heuristic_speaker(text)
     if confidence >= 0.7:
@@ -55,7 +56,9 @@ async def detect_speaker(
 
     if use_llm and llm is not None and model and text.strip():
         try:
-            resp = await llm.complete(
+            resp = await complete_with_timeout(
+                llm,
+                timeout=timeout,
                 system=(
                     "Classify who most likely wrote this WhatsApp message to an "
                     "MBBS-abroad consultancy: the prospective STUDENT, their PARENT, "

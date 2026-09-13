@@ -1,0 +1,17 @@
+# ── whatsapp-web.js session data (contains auth credentials — NEVER commit) ──
+.wwebjs_auth/
+.wwebjs_cache/
+
+# ── Node deps ──
+node_modules/
+
+# ── local environment ──
+.env
+
+# ── recipient persistence (lives on Railway Volume, not in source control) ──
+recipients.json
+/data/
+
+# ── OS / editor noise ──
+.DS_Store
+*.log

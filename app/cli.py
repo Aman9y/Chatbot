@@ -235,17 +235,17 @@ def send_template(
     var: list[str] = typer.Option([], help="body variables as k=v (repeatable, ordered)"),
 ) -> None:
     async def _run() -> None:
-        import redis.asyncio as redis_asyncio
         from sqlalchemy import select
 
         from app.models.lead import Lead
+        from app.redis_client import build_redis_client
         from app.services.outreach import OutreachService
         from app.services.phone import normalize_phone
         from app.services.whatsapp.factory import build_whatsapp_client
 
         settings = get_settings()
         norm = normalize_phone(phone, settings.default_phone_region)
-        redis = redis_asyncio.from_url(settings.redis_url, decode_responses=True)
+        redis = build_redis_client(settings)
         wa = build_whatsapp_client(settings)
         try:
             async with _session_scope() as session:
@@ -278,7 +278,6 @@ def simulate(
     and print the bot's reply + the decision trace."""
 
     async def _run() -> None:
-        import redis.asyncio as redis_asyncio
         from sqlalchemy import select
 
         from app.models.conversation_trace import ConversationTrace
@@ -290,6 +289,7 @@ def simulate(
             SentBy,
         )
         from app.models.message import Message
+        from app.redis_client import build_redis_client
         from app.services import leads as leads_service
         from app.services.conversation.engine import ConversationEngine
         from app.services.knowledge.yaml_kb import load_knowledge_base
@@ -301,7 +301,7 @@ def simulate(
 
         settings = get_settings()
         norm = normalize_phone(phone, settings.default_phone_region)
-        redis = redis_asyncio.from_url(settings.redis_url, decode_responses=True)
+        redis = build_redis_client(settings)
         wa = build_whatsapp_client(settings)
         llm = build_llm_client(settings)
         kb = load_knowledge_base(settings.kb_path, strict=True)

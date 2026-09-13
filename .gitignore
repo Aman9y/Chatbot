@@ -23,3 +23,14 @@ build/
 rewrite_history.py
 commit_msg.txt
 .local/
+
+# ── webjs-service (WhatsApp Web bridge) ────────────────────────────────────────
+# Session credentials — contain auth cookies; NEVER commit.
+webjs-service/.wwebjs_auth/
+webjs-service/.wwebjs_cache/
+# Recipient persistence — lives on Railway Volume, not in source control.
+webjs-service/recipients.json
+webjs-service/data/
+# Local env — contains WEBJS_API_SECRET.
+webjs-service/.env
+

@@ -1,14 +1,39 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
 
 from app.security.signature import sign_body
+from app.services.llm.base import LLMClient, LLMResponse
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 APP_SECRET = "test-app-secret"
+
+
+class HangingLLMClient(LLMClient):
+    """An LLM client whose ``complete()`` never returns on its own — the
+    production shape of the 2026-09-12 incidents (a Celery task stuck with no
+    exception, no timeout, nothing). Used to prove a call site is actually
+    bounded by ``complete_with_timeout`` rather than awaiting forever.
+
+    ``delay_seconds`` is intentionally long relative to any timeout used in a
+    test — the test passes only if ``complete_with_timeout`` cuts the wait
+    short well before this delay would ever elapse.
+    """
+
+    provider = "hanging"
+
+    def __init__(self, delay_seconds: float = 3600.0) -> None:
+        self.delay_seconds = delay_seconds
+        self.calls = 0
+
+    async def complete(self, **kwargs: Any) -> LLMResponse:
+        self.calls += 1
+        await asyncio.sleep(self.delay_seconds)
+        raise AssertionError("HangingLLMClient.complete() should have been cancelled")
 
 
 def load_fixture_bytes(name: str) -> bytes:
