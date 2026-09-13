@@ -30,6 +30,7 @@ const http = require('http');
 // ─── dependencies ────────────────────────────────────────────────────────────
 const { Client, LocalAuth }   = require('whatsapp-web.js');
 const qrcode                  = require('qrcode-terminal');
+const QRCode                  = require('qrcode');
 const express                 = require('express');
 const axios                   = require('axios');
 
@@ -149,6 +150,7 @@ function delay(ms) {
 // ─── WhatsApp client ──────────────────────────────────────────────────────────
 let waState = 'INITIALIZING';
 let waClient = null;
+let lastQrString = null;  // stored so /qr endpoint can serve it
 
 function initWhatsAppClient() {
   // Use system Chromium (installed by Dockerfile) when available on Railway.
@@ -175,12 +177,9 @@ function initWhatsAppClient() {
 
   waClient.on('qr', (qr) => {
     waState = 'AWAITING_SCAN';
-    console.log('\n[webjs] ══════════════════════════════════════════════════');
-    console.log('[webjs] QR CODE — scan this with the NEW WhatsApp number');
-    console.log('[webjs] ══════════════════════════════════════════════════\n');
-    qrcode.generate(qr, { small: true });
-    console.log('\n[webjs] ══════════════════════════════════════════════════\n');
-    console.log('[webjs] Open WhatsApp on your phone -> Linked Devices -> Link a Device -> scan above QR');
+    lastQrString = qr;  // store for /qr endpoint
+    console.log('\n[webjs] QR code generated — open /qr endpoint in browser to scan');
+    qrcode.generate(qr, { small: true });  // also print to logs as fallback
   });
 
   waClient.on('authenticated', () => {
@@ -300,6 +299,36 @@ function requireApiSecret(req, res, next) {
   }
   next();
 }
+
+// ── GET /qr ──────────────────────────────────────────────────────────────────
+// Serves the current QR code as a scannable image in the browser.
+// Open this URL in your browser, then scan with WhatsApp -> Linked Devices.
+app.get('/qr', async (req, res) => {
+  if (waState === 'READY') {
+    return res.send('<h2 style="font-family:sans-serif;color:green">✅ Already authenticated! WhatsApp Web is READY.</h2>');
+  }
+  if (!lastQrString) {
+    return res.send('<h2 style="font-family:sans-serif;color:orange">⏳ QR not generated yet. Wait 30 seconds and refresh.</h2>');
+  }
+  try {
+    const dataUrl = await QRCode.toDataURL(lastQrString, { width: 400, margin: 2 });
+    res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Scan WhatsApp QR</title>
+  <meta http-equiv="refresh" content="20">
+  <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;background:#111;color:#fff;}</style>
+</head>
+<body>
+  <h2>📱 Scan with WhatsApp → Linked Devices → Link a Device</h2>
+  <img src="${dataUrl}" style="border:8px solid white;border-radius:12px;" />
+  <p style="color:#aaa;margin-top:16px">This page auto-refreshes every 20 seconds. State: <strong>${waState}</strong></p>
+</body>
+</html>`);
+  } catch (err) {
+    res.status(500).send('Failed to generate QR image: ' + err.message);
+  }
+});
 
 // ── GET /health ───────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
