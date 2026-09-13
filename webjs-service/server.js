@@ -181,6 +181,8 @@ function cleanStaleLocks(dirPath) {
 let waState = 'INITIALIZING';
 let waClient = null;
 let lastQrString = null;  // stored so /qr endpoint can serve it
+const lidToPhone = new Map();
+const phoneToLid = new Map();
 
 function initWhatsAppClient() {
   // Auto-clean stale locks before starting Chromium
@@ -245,19 +247,141 @@ function initWhatsAppClient() {
     }, 10_000);
   });
 
+  async function resolveSender(msg) {
+    let senderPhone = null;
+    let contactName = null;
+
+    // 1. Direct check on msg.from if already @c.us
+    if (msg.from && msg.from.endsWith('@c.us')) {
+      const raw = msg.from.replace('@c.us', '');
+      const clean = normalizePhone(raw);
+      if (/^\d{7,15}$/.test(clean)) senderPhone = clean;
+    }
+
+    // 2. Direct check on msg.author if @c.us
+    if (!senderPhone && msg.author && msg.author.endsWith('@c.us')) {
+      const raw = msg.author.replace('@c.us', '');
+      const clean = normalizePhone(raw);
+      if (/^\d{7,15}$/.test(clean)) senderPhone = clean;
+    }
+
+    // 3. Memory cache for previously resolved LID
+    if (!senderPhone && msg.from && lidToPhone.has(msg.from)) {
+      senderPhone = lidToPhone.get(msg.from);
+    }
+
+    // 4. Try msg.getContact()
+    try {
+      const contact = await msg.getContact();
+      if (contact) {
+        contactName = contact.pushname || contact.name || null;
+        if (!senderPhone) {
+          if (contact.number && /^\d{7,15}$/.test(normalizePhone(contact.number))) {
+            senderPhone = normalizePhone(contact.number);
+          } else if (contact.id && contact.id.server === 'c.us' && /^\d{7,15}$/.test(contact.id.user)) {
+            senderPhone = contact.id.user;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[webjs] getContact error:', err.message);
+    }
+
+    // 5. Try msg.getChat()
+    if (!senderPhone) {
+      try {
+        const chat = await msg.getChat();
+        if (chat && chat.id) {
+          if (chat.id.server === 'c.us' && /^\d{7,15}$/.test(chat.id.user)) {
+            senderPhone = chat.id.user;
+          }
+        }
+      } catch (err) {
+        console.warn('[webjs] getChat error:', err.message);
+      }
+    }
+
+    // 6. Try resolving LID via Chromium Page evaluation if available
+    if (!senderPhone && msg.from && msg.from.endsWith('@lid') && waClient && waClient.pupPage) {
+      try {
+        const resolved = await waClient.pupPage.evaluate((lid) => {
+          try {
+            const c = window.Store?.Contact?.get(lid);
+            if (c) {
+              if (c.phoneNumber) return String(c.phoneNumber).replace(/\D/g, '');
+              if (c.id?.server === 'c.us') return String(c.id.user);
+              if (c.userid && /^\d{7,15}$/.test(c.userid)) return String(c.userid);
+            }
+            if (window.Store?.LidUtils) {
+              if (typeof window.Store.LidUtils.getPhoneNumber === 'function') {
+                const res = window.Store.LidUtils.getPhoneNumber(lid);
+                if (res) return String(res).replace(/\D/g, '');
+              }
+              if (typeof window.Store.LidUtils.getPhoneNumberFromLid === 'function') {
+                const res = window.Store.LidUtils.getPhoneNumberFromLid(lid);
+                if (res) return String(res).replace(/\D/g, '');
+              }
+            }
+          } catch (_) {}
+          return null;
+        }, msg.from);
+
+        if (resolved && /^\d{7,15}$/.test(resolved)) {
+          senderPhone = resolved;
+        }
+      } catch (err) {
+        console.warn('[webjs] pupPage LID resolution error:', err.message);
+      }
+    }
+
+    // 7. Check raw message data (_data)
+    if (!senderPhone && msg._data) {
+      const candidates = [
+        msg._data.sender,
+        msg._data.author,
+        msg._data.id?.participant,
+        msg._data.id?.remote,
+      ];
+      for (const cand of candidates) {
+        if (typeof cand === 'string' && cand.endsWith('@c.us')) {
+          const clean = normalizePhone(cand.replace('@c.us', ''));
+          if (/^\d{7,15}$/.test(clean)) {
+            senderPhone = clean;
+            break;
+          }
+        }
+      }
+    }
+
+    // 8. Fallback: digits of msg.from
+    if (!senderPhone) {
+      const clean = normalizePhone(msg.from.replace(/@.*$/, ''));
+      senderPhone = clean;
+    }
+
+    // Cache bidirectionally if LID
+    if (senderPhone && msg.from && msg.from.endsWith('@lid')) {
+      lidToPhone.set(msg.from, senderPhone);
+      phoneToLid.set(senderPhone, msg.from);
+      console.log(`[webjs] Mapped LID ${msg.from} <-> Phone ${senderPhone}`);
+    }
+
+    return { senderPhone, contactName };
+  }
+
   // ── inbound message handling ─────────────────────────────────────────────
   waClient.on('message', async (msg) => {
     // Ignore group messages, status updates, and messages from ourselves.
     if (msg.isGroupMsg || msg.fromMe || msg.type === 'e2e_notification') return;
 
-    const senderPhone = normalizePhone(msg.from.replace('@c.us', ''));
+    const { senderPhone, contactName } = await resolveSender(msg);
     const body        = msg.body || '';
     const msgId       = msg.id && msg.id.id ? msg.id.id : `webjs_${Date.now()}`;
     const timestamp   = Math.floor((msg.timestamp || Date.now() / 1000));
 
-    console.log(`[webjs] Inbound from ***${senderPhone.slice(-4)}: ${body.slice(0, 60)}`);
+    console.log(`[webjs] Inbound from ***${senderPhone.slice(-4)} (${contactName || 'unknown'}): ${body.slice(0, 60)}`);
 
-    await forwardInboundToWebhook({ senderPhone, body, msgId, timestamp });
+    await forwardInboundToWebhook({ senderPhone, contactName, body, msgId, timestamp });
   });
 
   waClient.initialize().catch(err => {
@@ -275,7 +399,7 @@ function initWhatsAppClient() {
  * WEBHOOK_SIGNATURE_REQUIRED must be false on the Python side (same setting
  * used for 360dialog — already supported and tested).
  */
-async function forwardInboundToWebhook({ senderPhone, body, msgId, timestamp }) {
+async function forwardInboundToWebhook({ senderPhone, contactName, body, msgId, timestamp }) {
   const payload = {
     object: 'whatsapp_business_account',
     entry: [
@@ -290,6 +414,12 @@ async function forwardInboundToWebhook({ senderPhone, body, msgId, timestamp }) 
                 display_phone_number: WEBJS_OWN_NUMBER,
                 phone_number_id: 'webjs',
               },
+              contacts: [
+                {
+                  profile: { name: contactName || 'WhatsApp Lead' },
+                  wa_id: senderPhone,
+                },
+              ],
               messages: [
                 {
                   from: senderPhone,
@@ -441,7 +571,9 @@ app.post('/send', requireApiSecret, async (req, res) => {
   }
 
   // ── enqueue the send (sequential, no concurrent sends) ───────────────────
-  const waId = `${normalizedPhone}@c.us`;
+  // Prefer sending to known LID target if this lead originated from LID chat
+  const targetLid = phoneToLid.get(normalizedPhone);
+  const waId = targetLid || `${normalizedPhone}@c.us`;
   const msgText = message.trim();
 
   let sendResult = null;
@@ -449,11 +581,22 @@ app.post('/send', requireApiSecret, async (req, res) => {
 
   await enqueueSend(async () => {
     try {
-      const response = await waClient.sendMessage(waId, msgText);
-      sendResult = response;
-      // Inter-send delay for queue reliability.
+      sendResult = await waClient.sendMessage(waId, msgText);
       if (SEND_DELAY_MS > 0) await delay(SEND_DELAY_MS);
     } catch (err) {
+      // Fallback: if sending via targetLid failed, try @c.us (or vice versa)
+      const altWaId = (waId === targetLid) ? `${normalizedPhone}@c.us` : targetLid;
+      if (altWaId) {
+        try {
+          console.log(`[webjs] Initial send to ${waId} failed (${err.message}). Retrying via ${altWaId}...`);
+          sendResult = await waClient.sendMessage(altWaId, msgText);
+          if (SEND_DELAY_MS > 0) await delay(SEND_DELAY_MS);
+          return;
+        } catch (retryErr) {
+          sendError = retryErr;
+          return;
+        }
+      }
       sendError = err;
     }
   });

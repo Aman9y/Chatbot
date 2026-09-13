@@ -74,9 +74,24 @@ def normalize_phone(raw: str | None, default_region: str = "IN") -> NormalizedPh
 
 
 def normalize_wa_id(wa_id: str, default_region: str = "IN") -> NormalizedPhone:
-    """Meta sends sender/recipient as bare digits (e.g. '919812345678')."""
+    """Meta sends sender/recipient as bare digits (e.g. '919812345678').
+    WebJS may forward IDs with @c.us or @lid suffixes."""
 
     wa_id = wa_id.strip()
-    if not wa_id.startswith("+"):
-        wa_id = "+" + wa_id
-    return normalize_phone(wa_id, default_region)
+    # Strip any @lid, @c.us suffix if present
+    wa_id = wa_id.split("@")[0]
+    candidate = wa_id if wa_id.startswith("+") else "+" + wa_id
+    try:
+        return normalize_phone(candidate, default_region)
+    except PhoneNormalizationError:
+        # Fallback for internal IDs (e.g. webjs LIDs or numbers without country prefix)
+        digits = "".join(ch for ch in wa_id if ch.isdigit())
+        if 7 <= len(digits) <= 15:
+            return NormalizedPhone(
+                e164="+" + digits,
+                country=None,
+                national=digits,
+                raw=wa_id,
+            )
+        raise
+
