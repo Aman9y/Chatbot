@@ -151,21 +151,26 @@ let waState = 'INITIALIZING';
 let waClient = null;
 
 function initWhatsAppClient() {
+  // Use system Chromium (installed by Dockerfile) when available on Railway.
+  const puppeteerArgs = {
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-gpu',
+    ],
+  };
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    puppeteerArgs.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+
   waClient = new Client({
     authStrategy: new LocalAuth({ dataPath: AUTH_PATH }),
-    puppeteer: {
-      // Headless required for server environments (Railway).
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-      ],
-    },
+    puppeteer: puppeteerArgs,
   });
 
   waClient.on('qr', (qr) => {
