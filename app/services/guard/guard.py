@@ -177,7 +177,27 @@ class ResponseGuard:
 
         named = detectors.countries_named(text, ranged)
 
-        # Director review: several countries that genuinely SHARE one approved
+        # Approved multi-country roadmap exemption:
+        # When presenting the roadmap of destinations and budgets (Uzbekistan, Kazakhstan, Kyrgyzstan, Russia, etc.),
+        # multiple countries are legitimately listed together with their packages.
+        is_roadmap = (
+            len(named) >= 3
+            or "roadmap" in text.lower()
+            or ("uzbekistan" in text.lower() and "kazakhstan" in text.lower())
+        )
+        if is_roadmap:
+            all_lo = min(b[0] for b in ctx.country_bounds.values())
+            all_hi = max(b[1] for b in ctx.country_bounds.values())
+            for value in money.figures_in_lakh(text):
+                if not math.isnan(value) and not (all_lo - 1.0 <= value <= all_hi + 1.0):
+                    return [
+                        Violation(
+                            "cost_outside_approved_range",
+                            f"₹{value:g} lakh",
+                            f"figure not within any approved country range (₹{all_lo:g}–{all_hi:g} lakh)",
+                        )
+                    ]
+            return []
         # range (Uzbekistan/Kazakhstan/Kyrgyzstan are all ~30-35L) may be named
         # together as examples of ONE real figure — that is not "blending"
         # different ranges, it is citing a single number for an equivalent

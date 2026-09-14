@@ -432,24 +432,28 @@ def _country_gate_block(effective_country_discussed: bool) -> str:
 
 
 _STILL_DECIDING_CONTENT = (
-    "Give this comparison (natural phrasing, but keep this substance):\n"
-    "- Bangladesh — very close to India, but on the costlier side\n"
-    "- Georgia — strong social/campus life\n"
-    "- Russia — similar strengths to Georgia, slightly less on the social side\n"
-    "- Uzbekistan, Kazakhstan, Kyrgyzstan — stable, well-established study "
-    "environments, worth exploring\n"
-    "End this message with a safety/facilities reassurance: separate facilities "
-    "for male and female students, medical/health and security fully handled "
-    "at every location, the student is the priority. Do NOT mention cost here "
-    "unless they specifically ask.\n"
+    "Present the complete roadmap of major countries with their total budgets, process, and support in this exact smooth format:\n\n"
+    "Acknowledge their NEET score warmly (e.g. \"Great! A [score] in NEET is a solid score that qualifies you comfortably for top government medical universities abroad.\").\n\n"
+    "Here is the complete roadmap of major countries and their total budgets:\n"
+    "• Uzbekistan: ₹30–35 Lakh\n"
+    "• Kazakhstan: ₹30–35 Lakh\n"
+    "• Kyrgyzstan: ₹30–35 Lakh\n"
+    "• Russia: ₹27–45 Lakh\n"
+    "• Bangladesh: ₹32–45 Lakh\n"
+    "• Georgia: ₹38–55 Lakh\n"
+    "• Nepal: ₹57–80 Lakh\n\n"
+    "We work primarily with NMC-recognised government universities across all these destinations, as well as select private universities.\n\n"
+    "We handle your complete journey end-to-end:\n"
+    "• Full 20-Day Process: Document preparation, university offer letter, visa stamping, and travel arrangements.\n"
+    "• Full 5+1 Year On-Ground Support: Separate boys & girls hostels, 24/7 security, Indian mess food, and college support throughout your degree and internship.\n\n"
+    "Close with: \"Do you have a preferred budget range, or any region you’d like to explore first? (Also, what was your 12th PCB percentage?)\"\n\n"
+    "Do NOT deflect to Rafique Sir or push a phone call here — answer smoothly and let the student explore the options first.\n"
 )
 
 _RAFIQUE_INTRO_CONTENT = (
-    "Introduce him using this framing (natural wording, keep this substance): "
-    "\"our director, Rafique Sir, has 10+ years of experience in this field and "
-    "can guide you better on the exact details — I'm just Stellar AI, an "
-    "assistant. Please reach out to him directly for more specific guidance.\" "
-    "Then give his number, per the contact rules elsewhere in this prompt.\n"
+    "When the student has narrowed down a country, asks to speak to someone, or asks to visit our office: "
+    "connect them with director Rafique Sir (+91 87674 24644) or our Thane office. "
+    "Never deflect early while they are still exploring destinations.\n"
 )
 
 
