@@ -9,6 +9,7 @@ from app import __version__
 from app.api.errors import register_exception_handlers
 from app.api.middleware import RequestContextMiddleware
 from app.api.routes_admin import router as admin_router
+from app.api.routes_campaign import router as campaign_router
 from app.api.routes_demo import STATIC_DIR as DEMO_STATIC_DIR
 from app.api.routes_demo import router as demo_router
 from app.api.routes_health import router as health_router
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(webhook_router)
     app.include_router(admin_router)
+    app.include_router(campaign_router)
     # Local WhatsApp-lookalike demo (app/api/routes_demo.py) — separate from the
     # real Meta webhook flow above. The router itself gates every request
     # behind DEMO_ENABLED, but the static mount below is evaluated eagerly at

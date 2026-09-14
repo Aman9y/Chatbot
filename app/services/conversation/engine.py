@@ -13,6 +13,8 @@ persisted; the trace records the error and a human can follow up.
 
 from __future__ import annotations
 
+import asyncio
+import random
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -421,6 +423,13 @@ class ConversationEngine:
                 ),
                 context={"trace_id": str(trace.id)},
             )
+
+        # Natural human response delay (10 to 17 seconds, occasionally up to 25s)
+        # Mimics a real counselor reading, thinking, and typing out the reply.
+        if s.app_env != "test":
+            reply_delay = random.uniform(10.0, 17.0) if random.random() > 0.15 else random.uniform(18.0, 25.0)
+            logger.info("Human response simulation: pausing %.1fs before sending reply to %s", reply_delay, mask_phone(lead.phone_e164))
+            await asyncio.sleep(reply_delay)
 
         outbound = await self._outreach.send_text(
             lead,
