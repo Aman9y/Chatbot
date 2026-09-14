@@ -167,6 +167,8 @@ class WebJSWhatsAppClient(WhatsAppClient):
         body_vars = (variables or {}).get("body") or []
         if body_vars:
             text = " ".join(str(v) for v in body_vars)
+        elif template_name == self._settings.consent_ask_template_name:
+            text = self._settings.opening_message
         else:
             text = f"[{template_name}]"
 

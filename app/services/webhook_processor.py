@@ -375,12 +375,7 @@ class WebhookProcessor:
             logger.info("inbound %s already processed; skipping", message.id)
             return
 
-        # capture the WhatsApp profile name if we don't have one
-        if not lead.full_name and value.contacts:
-            for contact in value.contacts:
-                if contact.profile and contact.profile.name:
-                    lead.full_name = contact.profile.name
-                    break
+        # Do not capture WhatsApp profile handles as student name; we only know their phone number.
 
         # --- STOP / opt-out short-circuit (BEFORE normal processing) -----
         if text and is_opt_out(text, self._stop_keywords):
@@ -399,12 +394,15 @@ class WebhookProcessor:
             return
 
         if lead.lifecycle_state == LifecycleState.OPTED_OUT:
-            # Opted-out lead sent a normal message; record it, do not re-engage.
+            # If the user re-initiates contact voluntarily (and didn't type an opt-out keyword),
+            # re-activate the lead so they aren't permanently locked out of chatting.
+            lead.lifecycle_state = LifecycleState.ENGAGED
+            lead.consent_status = ConsentStatus.OPTED_IN
+            lead.consent_gate = ConsentGate.CLEARED
             logger.info(
-                "message from opted-out lead; persisted, not re-engaged",
+                "opted-out lead re-initiated contact; re-activating conversation",
                 extra=log_extra(phone=mask_phone(lead.phone_e164)),
             )
-            return
 
         # --- normal processing ---------------------------------------
         # Window is measured from when we processed the inbound message (robust

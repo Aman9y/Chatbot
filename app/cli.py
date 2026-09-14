@@ -260,6 +260,7 @@ def send_template(
                     template_name=template,
                     language=lang,
                     variables={"body": body_vars} if body_vars else None,
+                    purpose="consent_ask",
                 )
                 typer.echo(f"sent: message={msg.id} wamid={msg.wa_message_id}")
         finally:

@@ -174,18 +174,15 @@ class Settings(BaseSettings):
     # OPENROUTER_DATA_POLICY_CONFIRMED must be set true to acknowledge it.
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_model: str = "google/gemini-3.7-flash"
-    openrouter_classifier_model: str = "google/gemini-3.7-flash"
+    openrouter_model: str = "openai/gpt-5-mini"
+    openrouter_classifier_model: str = "openai/gpt-5-mini"
     # Optional attribution headers OpenRouter shows on its dashboard.
     openrouter_app_url: str = ""
     openrouter_app_title: str = ""
     # --- OpenRouter routing safety pin (enforced in code on every request) ---
     # Restrict upstream routing so lead data can only reach an endpoint we have
-    # vetted. Defaults: Google Vertex only (Vertex does not train on API data;
-    # AI Studio's terms can), refuse any endpoint that stores data
-    # non-transiently, request zero-data-retention, and never silently fall back
-    # to another provider. Empty openrouter_provider_only removes the allow-list.
-    openrouter_provider_only: str = "google-vertex"
+    # vetted. Empty openrouter_provider_only removes the allow-list so OpenAI/Azure is permitted.
+    openrouter_provider_only: str = ""
     openrouter_data_collection: Literal["", "allow", "deny"] = "deny"
     openrouter_require_zdr: bool = True
     openrouter_allow_fallbacks: bool = False
@@ -213,8 +210,8 @@ class Settings(BaseSettings):
 
     # --- consent + age gate (build-plan §2 / DPDP) -----------------------
     # Master switch. When false the engine treats every lead as gate-cleared
-    # (the pre-gate behaviour).
-    consent_gate_enabled: bool = True
+    # (the pre-gate behaviour, directly running the MBBS counseling conversation).
+    consent_gate_enabled: bool = False
     # The outbound opt-in drip sweep. OFF by default — needs an approved Meta
     # template and a deliberate operator decision to start contacting leads.
     consent_ask_sweep_enabled: bool = False
@@ -234,7 +231,7 @@ class Settings(BaseSettings):
     opening_message: str = (
         "Hi! I'm Stellar AI from Stellar Educonsultancy. Are you interested in "
         "exploring MBBS abroad or MBBS in India for your future UG medical "
-        "studies? If yes, we're here to help anytime!"
+        "studies? If yes, type yes , we're here to help anytime!"
     )
     # WABA warm-up: how many opt-in asks one sweep tick sends (a natural drip).
     consent_asks_per_sweep: int = 25
@@ -261,8 +258,8 @@ class Settings(BaseSettings):
     # --- Response Guard (Phase 4) --------------------------------------
     guard_enabled: bool = True
     guard_llm_critic_enabled: bool = False
-    guard_max_reply_chars: int = 700
-    guard_max_reply_words: int = 90
+    guard_max_reply_chars: int = 1400
+    guard_max_reply_words: int = 200
     guard_regenerate_attempts: int = 1
 
     # --- booking / handoff ---------------------------------------------

@@ -237,17 +237,19 @@ chunks:
       the counsellor gives you a candid view for each option.
 
   - id: government-institutes
-    title: We place students only in government medical institutes
+    title: We work with government and select private medical institutes
     tags: [legitimate, legitimacy, government, private, recognition, trust, genuine, safe, fake]
     text: >
-      Across every country we work with, we place students only in government or
-      government-led medical institutes — not private colleges. This is a
-      deliberate policy and one of the main reasons families work with us. A
-      government medical university is state-run and state-accountable, which is
-      the clearest answer to "how do I know this university is real and will still
-      be recognised in a few years". The counsellor confirms the exact recognition
-      status (NMC listing, WHO directory) for any specific university on your
-      shortlist.
+      Across every country we work with, we primarily place students in government
+      or government-led medical institutes. However, we also have collaborations
+      with select private universities that are NMC-recognised and meet all
+      regulatory requirements. Our primary recommendation is always government
+      institutes because they are state-run and state-accountable — the clearest
+      answer to "how do I know this university is real". But where a private
+      university is genuinely a better fit for a student's profile or preferences,
+      we can facilitate that too. The counsellor confirms the exact recognition
+      status (NMC listing, WHO directory) for every university on your shortlist,
+      whether government or private.
 
   - id: about-stellar
     title: About Stellar Educonsultancy
@@ -261,3 +263,58 @@ chunks:
       Mira Road East, Thane, and the director is Rafique Shaikh, whom leads deal
       with directly. We do not make admission or university guarantees; the
       counsellor assesses each profile honestly.
+
+  - id: abroad-country-list
+    title: All countries we work with for MBBS abroad
+    tags: [abroad, countries, list, which country, options, destinations, all countries]
+    text: >
+      When a student or family asks about studying abroad or which countries are
+      available, the full list of major countries for MBBS is: Uzbekistan,
+      Kazakhstan, Kyrgyzstan, Russia, Georgia, Bangladesh, and Nepal. These cover
+      all the major destinations for Indian medical students. Each country has its
+      own cost band, university profile, and admission process. We can get the
+      student connected with any college they are looking for, in any of these
+      countries. The counsellor helps narrow down based on NEET score, PCB
+      percentage, budget, and personal preferences.
+
+  - id: student-facilities
+    title: Student facilities, safety, and accommodation abroad
+    tags: [facilities, hostel, safety, food, accommodation, security, girls, boys, gender, separate, living]
+    text: >
+      In every country and university we work with, the student's wellbeing is
+      the first priority. Key facilities we ensure are in place: separate
+      hostels for male and female students so gender-segregated accommodation
+      is guaranteed; 24/7 security at the campus and hostel premises;
+      Indian food options available (mess or nearby restaurants serving
+      Indian meals); daily needs covered through nearby markets and Indian
+      student communities; medical and health support on campus. Parents can
+      be reassured that their child will have a safe, structured environment.
+      The counsellor confirms the exact facilities at each university on
+      the shortlist before any decision is made.
+
+  - id: admission-process-detail
+    title: The full 20-day admission process and what the cost covers
+    tags: [process, timeline, 20 days, documentation, visa, travel, offer letter, passport, fees, cost, what is included]
+    text: >
+      The full process from start to finish takes approximately 20 days. This
+      covers everything: documentation preparation (Class 10 and 12 marksheets,
+      NEET result, passport, university application forms), getting the offer
+      letter from the university, visa processing, flight/travel arrangements,
+      and on-ground support after arrival. When the total cost is mentioned,
+      it is an all-inclusive package — documentation and travel are both
+      included in that figure. There are no hidden charges outside the package.
+      The counsellor walks through the exact breakdown on the call so families
+      know exactly what they are paying for and why.
+
+  - id: private-university-options
+    title: Private university collaborations
+    tags: [private, private university, private college, private mbbs, collaboration, partner]
+    text: >
+      Besides government medical universities, Stellar Educonsultancy also has
+      collaborations with select private universities abroad that are
+      NMC-recognised. So when a student asks about private universities or
+      cannot secure a government seat, we have options for them in that space
+      too. Private universities abroad can still be a valid, recognised route
+      as long as the university meets all NMC criteria. The counsellor
+      advises on which private institutions are worth considering and which
+      are not, based on recognition status and track record.
