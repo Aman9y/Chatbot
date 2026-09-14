@@ -56,7 +56,7 @@ async def reset_lead(
     # Find leads matching phone
     stmt = select(Lead).where(
         (Lead.phone_e164 == e164)
-        | (Lead.raw_phone == phone)
+        | (Lead.phone_raw == phone)
         | (Lead.phone_e164.like(f"%{suffix}%"))
     )
     result = await db.execute(stmt)
@@ -94,12 +94,13 @@ async def reset_lead(
     await db.commit()
 
     # Flush Redis cache/turn lock for this phone if any
-    try:
-        keys = await redis.keys(f"*{suffix}*")
-        if keys:
-            await redis.delete(*keys)
-    except Exception as e:
-        logger.warning("Redis cleanup failed (non-fatal): %s", e)
+    if redis is not None:
+        try:
+            keys = await redis.keys(f"*{suffix}*")
+            if keys:
+                await redis.delete(*keys)
+        except Exception as e:
+            logger.warning("Redis cleanup failed (non-fatal): %s", e)
 
     return {
         "status": "success",
