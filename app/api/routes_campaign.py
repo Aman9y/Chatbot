@@ -16,10 +16,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from sqlalchemy import select
+
 from app.config import Settings, get_settings
 from app.db.session import get_sessionmaker
 from app.logging_config import get_logger, mask_phone
 from app.models.enums import ConsentGate
+from app.models.lead import Lead
+from app.models.message import Message
 from app.redis_client import build_redis_client
 from app.services import leads as leads_service
 from app.services.outreach import OutreachService
@@ -472,3 +476,50 @@ async def toggle_pause():
         state.pause_event.clear()
         state.status_text = "Campaign paused by user."
     return {"ok": True, "status": state.status}
+
+
+@router.get("/api/campaign/lead-check")
+async def lead_check(phone: str = "7304377739"):
+    sessionmaker = get_sessionmaker()
+    suffix = phone.strip()[-10:]
+    async with sessionmaker() as session:
+        stmt = select(Lead).where(
+            (Lead.phone_e164.like(f"%{suffix}%")) | (Lead.phone_raw.like(f"%{suffix}%"))
+        )
+        res = await session.execute(stmt)
+        leads = res.scalars().all()
+
+        out_leads = []
+        for l in leads:
+            msg_stmt = (
+                select(Message)
+                .where((Message.lead_id == l.id) | (Message.counterparty_phone.like(f"%{suffix}%")))
+                .order_by(Message.created_at.asc())
+            )
+            msg_res = await session.execute(msg_stmt)
+            msgs = msg_res.scalars().all()
+            out_leads.append({
+                "id": str(l.id),
+                "phone_e164": l.phone_e164,
+                "neet_score": l.neet_score,
+                "pcb_percentage": l.pcb_percentage,
+                "target_country": l.target_country,
+                "country_still_deciding": l.country_still_deciding,
+                "eligibility_flag": str(l.eligibility_flag),
+                "lifecycle_state": str(l.lifecycle_state),
+                "consent_gate": str(l.consent_gate),
+                "created_at": str(l.created_at),
+                "last_inbound_at": str(l.last_inbound_at),
+                "last_outbound_at": str(l.last_outbound_at),
+                "total_messages": len(msgs),
+                "messages": [
+                    {
+                        "direction": str(m.direction),
+                        "created_at": str(m.created_at),
+                        "status": str(m.status),
+                        "body": m.body,
+                    }
+                    for m in msgs
+                ],
+            })
+        return {"count": len(out_leads), "phone": phone, "leads": out_leads}
