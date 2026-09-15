@@ -76,8 +76,7 @@ class Settings(BaseSettings):
     # Must match WEBJS_API_SECRET on the Node side.
     webjs_api_secret: str = ""
     # Maximum unique outbound recipients for the webjs client.
-    # Hard ceiling is 250 — raising above it requires a source-code change.
-    webjs_max_recipients: int = 250
+    webjs_max_recipients: int = 2000
 
     # --- inbound webhook security --------------------------------------------
     # Meta signs every webhook POST with X-Hub-Signature-256 (HMAC of
