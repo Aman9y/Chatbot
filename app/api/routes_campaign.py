@@ -29,22 +29,31 @@ from app.services.whatsapp.factory import build_whatsapp_client
 logger = get_logger(__name__)
 router = APIRouter(tags=["campaign"])
 
-# 51 Clean Unique Numbers from verified list (divided into 2 sets: 25 and 26)
+# 98 Clean Unique Numbers from verified list (divided into 2 sets: 50 and 48)
 SET_1_NUMBERS = [
-    "+919920481829", "+919594187691", "+918976661212", "+919146287531", "+918292838743",
-    "+919004161234", "+919594804863", "+918450915543", "+919819889159", "+917045637848",
-    "+918591767864", "+918369042621", "+918108888939", "+918424837040", "+918591032771",
-    "+918898310947", "+918956263554", "+919324138931", "+919569165248", "+919818483363",
-    "+918779394003", "+919920467378", "+917208403820", "+919869012501", "+919920776595",
+    "+919004413868", "+918976661213", "+919594354445", "+919757475621", "+918422016898",
+    "+919619008845", "+919820337498", "+919372855757", "+918484003400", "+919975405938",
+    "+919821127558", "+918850855990", "+919920353473", "+919321560539", "+919619911583",
+    "+919702211935", "+918928141118", "+919082863252", "+918898889090", "+918655843329",
+    "+918890936873", "+917219684971", "+918108277266", "+919324508373", "+919820490553",
+    "+918625984443", "+919987334442", "+919004118666", "+918879365338", "+917045226995",
+    "+918384886100", "+919820542126", "+919326163817", "+919321644495", "+918080320640",
+    "+919892363904", "+916216095594", "+919967013622", "+917763169201", "+918169037489",
+    "+919168832277", "+917000174009", "+919833453323", "+917718059077", "+919987401068",
+    "+919653354994", "+919867394374", "+919702834393", "+919029025283", "+919224147857",
 ]
 
 SET_2_NUMBERS = [
-    "+918291817126", "+919082871802", "+917506311230", "+919372330126", "+916306326168",
-    "+919867424791", "+919325529267", "+919860660698", "+919967730653", "+918693886611",
-    "+916206095594", "+919820295469", "+917977625588", "+919137193035", "+918828059235",
-    "+919322691555", "+919892078192", "+918356077899", "+919821802640", "+918693064767",
-    "+919930623145", "+919004566181", "+919833065726", "+919324270539", "+919867271828",
-    "+917738484966",
+    "+919892062216", "+918652182842", "+919136239579", "+919833749199", "+919930993580",
+    "+919892049956", "+919167473558", "+917498288601", "+918108034035", "+919867879941",
+    "+917304025568", "+919870531428", "+919820179197", "+919699090222", "+917738484966",
+    "+918976199121", "+919769135466", "+919821117558", "+919987548658", "+918960052252",
+    "+919324870437", "+917045612775", "+919880993180", "+919004413638", "+919320358837",
+    "+919324252659", "+919867653135", "+917400328971", "+919004566181", "+917054204211",
+    "+918452038720", "+918591884413", "+919082116041", "+919137128266", "+918080738595",
+    "+919869743881", "+919004130059", "+917304659819", "+918779557055", "+919004863325",
+    "+917045153175", "+919860501996", "+919967207978", "+918693064767", "+918850181468",
+    "+919869868275", "+919136811950", "+919321412112",
 ]
 
 class CampaignState:
@@ -75,7 +84,7 @@ async def _run_campaign_task():
     wa_client = build_whatsapp_client(settings)
     batches = [(1, SET_1_NUMBERS), (2, SET_2_NUMBERS)]
 
-    logger.info("Campaign task started: 50 leads in 2 sets of 25.")
+    logger.info("Campaign task started: 98 leads in 2 sets (50 and 48).")
 
     try:
         for set_idx, batch_numbers in batches:
@@ -157,9 +166,9 @@ async def _run_campaign_task():
 
             # End of Set 1 -> Enter Cooldown if next set exists
             if set_idx == 1:
-                cooldown_seconds = random.randint(1500, 1800)  # 25 to 30 minutes
+                cooldown_seconds = 7200  # 2 hours (120 minutes)
                 state.status = "cooldown"
-                state.status_text = f"☕ Set 1 Complete ({len(batch_numbers)}/{len(batch_numbers)})! Cooling down for {cooldown_seconds // 60} minutes before Set 2..."
+                state.status_text = f"☕ Set 1 Complete ({len(batch_numbers)}/{len(batch_numbers)})! Cooling down for 2 hours before Set 2..."
                 state.countdown_seconds = cooldown_seconds
 
                 for _ in range(cooldown_seconds):
@@ -285,7 +294,7 @@ async def campaign_dashboard():
         <div id="pulseDot" class="pulse-dot"></div>
         <div id="statusTitle" class="status-title">IDLE</div>
       </div>
-      <div id="statusMsg" class="status-msg">Click 'Start Campaign' below. Railway will dispatch 2 sets of 25 leads with 4-5 min gaps and 35-45 min resting.</div>
+      <div id="statusMsg" class="status-msg">Click 'Start Campaign' below. Railway will dispatch 98 leads across 2 sets (50 & 48) with 3-minute gaps and a 2-hour cooldown.</div>
 
       <div class="clock-box" id="clockBox" style="display: none;">
         <div>
@@ -295,14 +304,14 @@ async def campaign_dashboard():
       </div>
 
       <div class="controls">
-        <button class="btn-start" id="startBtn" onclick="triggerStart()">🚀 Start 50-Lead Campaign</button>
+        <button class="btn-start" id="startBtn" onclick="triggerStart()">🚀 Start 98-Lead Campaign</button>
         <button class="btn-pause" id="pauseBtn" onclick="triggerTogglePause()" style="display: none;">⏸️ Pause</button>
       </div>
     </div>
 
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-val" id="statSent" style="color: #34d399;">0 / 50</div>
+        <div class="stat-val" id="statSent" style="color: #34d399;">0 / 98</div>
         <div class="stat-label">Total Contacts Sent</div>
       </div>
       <div class="stat-card">
@@ -329,7 +338,7 @@ async def campaign_dashboard():
         </thead>
         <tbody id="historyBody">
           <tr>
-            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">No leads dispatched yet. Click 'Start 50-Lead Campaign' above.</td>
+            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">No leads dispatched yet. Click 'Start 98-Lead Campaign' above.</td>
           </tr>
         </tbody>
       </table>
@@ -341,8 +350,12 @@ async def campaign_dashboard():
 
     function formatSeconds(sec) {
       if (sec <= 0) return "00:00";
-      const m = Math.floor(sec / 60);
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
       const s = sec % 60;
+      if (h > 0) {
+        return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+      }
       return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }
 
@@ -411,7 +424,7 @@ async def campaign_dashboard():
     }
 
     async function triggerStart() {
-      if (!confirm('Start the 50-lead campaign on Railway Cloud now? You can safely close your laptop afterwards.')) return;
+      if (!confirm('Start the 98-lead campaign on Railway Cloud now? You can safely close your laptop afterwards.')) return;
       await fetch('/api/campaign/start', { method: 'POST' });
       updateStatus();
     }
@@ -455,6 +468,10 @@ async def start_campaign():
     if state.status in ("running", "cooldown"):
         return {"ok": True, "message": "Campaign is already running."}
 
+    state.sent_count = 0
+    state.failed_count = 0
+    state.history = []
+    state.total_leads = len(SET_1_NUMBERS) + len(SET_2_NUMBERS)
     state.status = "running"
     state.pause_event.set()
     state.task = asyncio.create_task(_run_campaign_task())

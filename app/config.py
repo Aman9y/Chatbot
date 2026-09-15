@@ -229,9 +229,13 @@ class Settings(BaseSettings):
     # edit the gate_consent_v1 template to match this text and resubmit it,
     # and it cannot go live until Meta approves the new version.
     opening_message: str = (
-        "Hi! I'm Stellar AI from Stellar Educonsultancy. Are you interested in "
-        "exploring MBBS abroad or MBBS in India for your future UG medical "
-        "studies? If yes, type yes , we're here to help anytime!"
+        "Hi! This is Stellar AI from Stellar Educonsultancy. We help students and parents with guidance "
+        "and admissions for MBBS in India and abroad, including helping them understand their options "
+        "and the admission process.\n\n"
+        "For more information and to verify us, you can visit our Instagram page:\n"
+        "https://www.instagram.com/stellareduconsultancy?stkn=ejRmZGJyaGMzaWI0\n\n"
+        "If you’re genuinely interested in MBBS in India or abroad, simply reply “YES” and a member "
+        "of our team will get in touch with you shortly."
     )
     # WABA warm-up: how many opt-in asks one sweep tick sends (a natural drip).
     consent_asks_per_sweep: int = 25
