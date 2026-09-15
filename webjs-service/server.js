@@ -179,6 +179,7 @@ function cleanStaleLocks(dirPath) {
 
 // ─── WhatsApp client ──────────────────────────────────────────────────────────
 let waState = 'INITIALIZING';
+let lastInitError = null;
 let waClient = null;
 let lastQrString = null;  // stored so /qr endpoint can serve it
 const lidToPhone = new Map();
@@ -386,7 +387,15 @@ function initWhatsAppClient() {
 
   waClient.initialize().catch(err => {
     console.error('[webjs] Initialise failed:', err.message);
+    lastInitError = err.message;
     waState = 'INIT_FAILED';
+    // Auto-retry once after 10s if initialization failed on cold boot
+    setTimeout(() => {
+      if (waState === 'INIT_FAILED') {
+        console.log('[webjs] Retrying initialization after failure...');
+        initWhatsAppClient();
+      }
+    }, 10_000);
   });
 }
 
@@ -500,10 +509,26 @@ app.get('/health', (req, res) => {
   res.json({
     ok: true,
     wa_state: waState,
+    init_error: lastInitError,
     recipients_used: recipientSet.size,
     recipients_max: MAX_RECIPIENTS,
     recipients_remaining: MAX_RECIPIENTS - recipientSet.size,
   });
+});
+
+// ── GET /restart ──────────────────────────────────────────────────────────────
+app.get('/restart', async (req, res) => {
+  try {
+    if (waClient) {
+      try { await waClient.destroy(); } catch (_) {}
+    }
+    waState = 'INITIALIZING';
+    lastInitError = null;
+    initWhatsAppClient();
+    res.json({ ok: true, message: 'WhatsApp client re-initialization triggered.' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // ── POST /send ────────────────────────────────────────────────────────────────
