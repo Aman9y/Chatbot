@@ -25,6 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.logging_config import get_logger, log_extra, mask_phone
 from app.models.enums import (
+    ConsentGate,
+    ConsentStatus,
     LifecycleEvent,
     LifecycleState,
     MessageStatus,

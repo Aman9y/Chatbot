@@ -424,10 +424,10 @@ class ConversationEngine:
                 context={"trace_id": str(trace.id)},
             )
 
-        # Natural human response delay (10 to 17 seconds, occasionally up to 25s)
+        # Natural human response delay (5 to 7 seconds)
         # Mimics a real counselor reading, thinking, and typing out the reply.
         if s.app_env != "test":
-            reply_delay = random.uniform(10.0, 17.0) if random.random() > 0.15 else random.uniform(18.0, 25.0)
+            reply_delay = random.uniform(5.0, 7.0)
             logger.info("Human response simulation: pausing %.1fs before sending reply to %s", reply_delay, mask_phone(lead.phone_e164))
             await asyncio.sleep(reply_delay)
 

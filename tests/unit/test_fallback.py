@@ -58,7 +58,7 @@ def test_legitimacy_fallback_uses_address_not_number():
     plan8 = select_deflection(topic_match=None, objection=detect_objection("are you genuine or a scam"))
     msg = safe_fallback_message(
         Settings(counselor_name="Rafique Shaikh", counselor_phone="+91 74478 67887",
-                 office_address="A Wing 302, Mira Road East, Thane"),
+                 office_address="A Wing 302, Mira Road East 401107"),
         plan=plan8,
     )
     assert "A Wing 302" in msg

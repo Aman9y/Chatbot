@@ -310,7 +310,7 @@ class Settings(BaseSettings):
     counselor_phone: str = "+91 74478 67887"
     office_address: str = (
         "A Wing 302, 2nd Floor, Shanti Shopping Center, near Mira Road Railway "
-        "Station, Mira Road East, Thane 401107"
+        "Station, Mira Road East 401107"
     )
     maps_link: str = ""  # [MISSING] not supplied by client
     booking_link: str = ""  # no self-serve booking

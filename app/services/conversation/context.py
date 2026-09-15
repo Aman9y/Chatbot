@@ -448,12 +448,12 @@ _STILL_DECIDING_CONTENT = (
     "• Full 5+1 Year On-Ground Support: Separate boys & girls hostels, 24/7 security, Indian mess food, and college support throughout your degree and internship.\n\n"
     "Do you have a preferred budget range, or any region you’d like to explore first?\n\n"
     "At the end of the message, introduce Rafique Sir:\n"
-    "\"For advanced guidance, we recommend reaching out directly to Rafique Sir. He is our Director and has been personally guiding students and handling this entire process for the past 10+ years. You can reach him directly at +91 87674 24644 (and if you'd like our Thane office address, just let me know and I will share it!).\"\n"
+    "\"For advanced guidance, we recommend reaching out directly to Rafique Sir. He is our Director and has been personally guiding students and handling this entire process for the past 10+ years. You can reach him directly at +91 87674 24644 (and if you'd like our Mira Road office address, just let me know and I will share it!).\"\n"
 )
 
 _RAFIQUE_INTRO_CONTENT = (
     "When the student has narrowed down a country, asks to speak to someone, or asks to visit our office: "
-    "connect them with director Rafique Sir (+91 87674 24644) or our Thane office. "
+    "connect them with director Rafique Sir (+91 87674 24644) or our Mira Road office. "
     "He has been personally guiding students and handling this entire process for over 10+ years. "
     "Never deflect early while they are still exploring destinations.\n"
 )
@@ -553,7 +553,7 @@ def _cycle_block(lead: Lead, effective_country_discussed: bool) -> str:
                 "   • Full 5+1 Year On-Ground Support: Separate boys & girls hostels, 24/7 security, Indian mess food, and college support throughout your degree and internship.\n"
                 "4. Close with: \"We're also open to any specific college you have in mind — happy to look into that too. Would you like more details on any of these universities?\"\n"
                 "5. At the end of the message, recommend Director Rafique Sir:\n"
-                "   \"For advanced guidance, we recommend reaching out directly to Rafique Sir. He is our Director and has been personally guiding students and handling this entire process for the past 10+ years. You can reach him directly at +91 87674 24644 (and if you'd like our Thane office address, just let me know and I will share it!).\"\n"
+                "   \"For advanced guidance, we recommend reaching out directly to Rafique Sir. He is our Director and has been personally guiding students and handling this entire process for the past 10+ years. You can reach him directly at +91 87674 24644 (and if you'd like our Mira Road office address, just let me know and I will share it!).\"\n"
             )
         return "\n## CYCLE STEP — country: roadmap & options\n" + _STILL_DECIDING_CONTENT
 

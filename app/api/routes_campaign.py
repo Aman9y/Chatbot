@@ -16,14 +16,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from sqlalchemy import select
-
 from app.config import Settings, get_settings
 from app.db.session import get_sessionmaker
 from app.logging_config import get_logger, mask_phone
 from app.models.enums import ConsentGate
-from app.models.lead import Lead
-from app.models.message import Message
 from app.redis_client import build_redis_client
 from app.services import leads as leads_service
 from app.services.outreach import OutreachService
@@ -33,21 +29,22 @@ from app.services.whatsapp.factory import build_whatsapp_client
 logger = get_logger(__name__)
 router = APIRouter(tags=["campaign"])
 
-# 50 Clean Unique Numbers from verified list (divided into 2 sets of 25)
+# 51 Clean Unique Numbers from verified list (divided into 2 sets: 25 and 26)
 SET_1_NUMBERS = [
-    "+918591059881", "+919004062366", "+919870247113", "+919321787426", "+919168832255",
-    "+919902316263", "+918425074341", "+918097810892", "+919136776835", "+918459484068",
-    "+919987302386", "+919076331316", "+919324282521", "+917350503727", "+919818519437",
-    "+918657439898", "+918828696284", "+917718858798", "+918850407207", "+917021972474",
-    "+919702119037", "+919653476866", "+917420923466", "+918433827180", "+918890865542",
+    "+919920481829", "+919594187691", "+918976661212", "+919146287531", "+918292838743",
+    "+919004161234", "+919594804863", "+918450915543", "+919819889159", "+917045637848",
+    "+918591767864", "+918369042621", "+918108888939", "+918424837040", "+918591032771",
+    "+918898310947", "+918956263554", "+919324138931", "+919569165248", "+919818483363",
+    "+918779394003", "+919920467378", "+917208403820", "+919869012501", "+919920776595",
 ]
 
 SET_2_NUMBERS = [
-    "+918975501301", "+918657213530", "+918779004980", "+919867911801", "+918355812875",
-    "+919022672403", "+918291521489", "+919892658052", "+919833974479", "+919819326868",
-    "+919967351199", "+918422900755", "+919870713035", "+919833846427", "+919920873155",
-    "+919969400417", "+917021041984", "+919820384971", "+919969308385", "+918433876334",
-    "+919987822945", "+919594117878", "+919321597050", "+919619688364", "+919942297862",
+    "+918291817126", "+919082871802", "+917506311230", "+919372330126", "+916306326168",
+    "+919867424791", "+919325529267", "+919860660698", "+919967730653", "+918693886611",
+    "+916206095594", "+919820295469", "+917977625588", "+919137193035", "+918828059235",
+    "+919322691555", "+919892078192", "+918356077899", "+919821802640", "+918693064767",
+    "+919930623145", "+919004566181", "+919833065726", "+919324270539", "+919867271828",
+    "+917738484966",
 ]
 
 class CampaignState:
@@ -147,7 +144,7 @@ async def _run_campaign_task():
                 # If more leads remain in this set, wait 4 to 5 minutes with natural jitter
                 is_last_in_set = (i == len(batch_numbers))
                 if not is_last_in_set:
-                    gap_seconds = random.randint(240, 300)  # 4 to 5 minutes
+                    gap_seconds = random.randint(170, 190)  # 3 minutes
                     state.status_text = f"Pacing: waiting {gap_seconds // 60}m {gap_seconds % 60}s before next contact..."
                     state.countdown_seconds = gap_seconds
 
@@ -160,9 +157,9 @@ async def _run_campaign_task():
 
             # End of Set 1 -> Enter Cooldown if next set exists
             if set_idx == 1:
-                cooldown_seconds = random.randint(2100, 2700)  # 35 to 45 minutes
+                cooldown_seconds = random.randint(1500, 1800)  # 25 to 30 minutes
                 state.status = "cooldown"
-                state.status_text = f"☕ Set 1 Complete (25/25)! Cooling down for {cooldown_seconds // 60} minutes before Set 2..."
+                state.status_text = f"☕ Set 1 Complete ({len(batch_numbers)}/{len(batch_numbers)})! Cooling down for {cooldown_seconds // 60} minutes before Set 2..."
                 state.countdown_seconds = cooldown_seconds
 
                 for _ in range(cooldown_seconds):
@@ -173,7 +170,7 @@ async def _run_campaign_task():
                     state.countdown_seconds -= 1
 
         state.status = "completed"
-        state.status_text = "🎉 All 50 leads contacted successfully!"
+        state.status_text = f"🎉 All {state.total_leads} leads contacted successfully!"
         state.countdown_seconds = 0
     except asyncio.CancelledError:
         state.status = "idle"
@@ -480,6 +477,10 @@ async def toggle_pause():
 
 @router.get("/api/campaign/lead-check")
 async def lead_check(phone: str = "7304377739"):
+    from sqlalchemy import select
+    from app.models.lead import Lead
+    from app.models.message import Message
+
     sessionmaker = get_sessionmaker()
     suffix = phone.strip()[-10:]
     async with sessionmaker() as session:
@@ -523,3 +524,4 @@ async def lead_check(phone: str = "7304377739"):
                 ],
             })
         return {"count": len(out_leads), "phone": phone, "leads": out_leads}
+
