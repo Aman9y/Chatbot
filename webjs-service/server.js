@@ -44,9 +44,9 @@ const SEND_DELAY_MS      = parseInt(process.env.WEBJS_SEND_DELAY_MS   || '1500',
 const RECIPIENT_DB_PATH  = process.env.WEBJS_RECIPIENT_DB_PATH        || '/data/recipients.json';
 const AUTH_PATH          = process.env.WEBJS_AUTH_PATH                || './.wwebjs_auth';
 
-// Hard cap: cannot exceed 250. Raising above 250 requires a source-code change.
-const ABSOLUTE_MAX_RECIPIENTS = 250;
-const configuredMax = parseInt(process.env.WEBJS_MAX_RECIPIENTS || '250', 10);
+// Hard cap: configured max up to 2000
+const ABSOLUTE_MAX_RECIPIENTS = 2000;
+const configuredMax = parseInt(process.env.WEBJS_MAX_RECIPIENTS || '2000', 10);
 const MAX_RECIPIENTS = Math.min(configuredMax, ABSOLUTE_MAX_RECIPIENTS);
 
 if (configuredMax > ABSOLUTE_MAX_RECIPIENTS) {
