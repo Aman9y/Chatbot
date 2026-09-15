@@ -100,19 +100,22 @@ def _cycle_responder(system: str, messages, purpose: str) -> str:
         return nmc_answer + "Quick one — are you general category or OBC/SC/ST/EWS?"
     if "CYCLE STEP — PCB percentage" in system:
         return nmc_answer + "And what was your PCB percentage — Physics, Chemistry, Biology combined?"
-    if "CYCLE STEP — country decision" in system:
-        return nmc_answer + "Have you decided on a country, or are you still deciding?"
-    if "CYCLE STEP — country: still deciding" in system:
-        return (
-            "Bangladesh is very close to India but a bit costlier, Georgia has "
-            "great social/campus life, Russia is similar to Georgia with "
-            "slightly less on the social side, and Uzbekistan, Kazakhstan and "
-            "Kyrgyzstan are stable, well-established options worth exploring. "
-            "Every location keeps separate facilities for male and female "
-            "students, and medical/health and security are fully handled "
-            "everywhere — you're the priority. Any of these stand out?"
-        )
     if "(decided)" in system and "CYCLE STEP — country" in system:
+        m = re.search(r"CYCLE STEP — country: (.+?) \(decided\)", system)
+        country = m.group(1) if m else "that country"
+        return (
+            f"Great pick, {country}! We place students at recognised "
+            "government universities there. We're also open to any specific "
+            "college you have in mind — happy to look into that too."
+        )
+    if "CYCLE STEP — country: roadmap & options" in system or "CYCLE STEP — country decision" in system:
+        return (
+            "Here is the complete roadmap of major countries and their total budgets: "
+            "Uzbekistan approx. ₹30–35 Lakh, Kazakhstan approx. ₹30–35 Lakh, "
+            "Kyrgyzstan approx. ₹30–35 Lakh, Russia approx. ₹27–45 Lakh, "
+            "Bangladesh approx. ₹32–45 Lakh, Georgia approx. ₹38–55 Lakh, and Nepal approx. ₹57–80 Lakh. "
+            "For advanced guidance, reach out to Director Rafique Sir (+91 74478 67887) who has 10+ years of experience."
+        )
         # the confirmed college list lives in the KB block further down the
         # prompt; the fake model just needs to name the country + reference
         # the standing "open to suggestions" close.
@@ -156,33 +159,30 @@ async def test_full_cycle_straight_through(session, redis_client, wa_client, kno
     assert lead.neet_score == 250
     assert "rafique" not in (r2.reply_text or "").lower()
 
-    # 3. PCB percentage -> eligibility resolves
+    # 3. PCB percentage -> eligibility resolves -> roadmap delivered
     r3 = await turn("my PCB percentage was 65%", "wamid.C3")
     assert lead.pcb_percentage == 65.0
     assert lead.eligibility_flag == EligibilityFlag.ABOVE_CUTOFF
-    assert "rafique" not in (r3.reply_text or "").lower()
+    reply3 = (r3.reply_text or "").lower()
+    assert "roadmap" in reply3 or "uzbekistan" in reply3
+    assert "rafique sir" in reply3
 
-    # 4. still deciding -> exact comparison substance + safety line
+    # 4. still deciding -> exact comparison substance / roadmap
     r4 = await turn("still deciding, can you compare a few for me?", "wamid.C4")
     assert lead.country_still_deciding is True
     reply4 = (r4.reply_text or "").lower()
     for needle in ("bangladesh", "georgia", "russia", "uzbekistan", "kazakhstan", "kyrgyzstan"):
         assert needle in reply4
-    assert "male and female" in reply4
-    assert "rafique" not in reply4  # country_discussed not true yet (lead hasn't named one)
 
-    # 5. lead finally names a country -> real back-and-forth complete
+    # 5. lead finally names a country -> real back-and-forth complete (both sides have named Georgia)
     r5 = await turn("Georgia sounds good actually", "wamid.C5")
     assert lead.target_country == "Georgia"
     assert lead.country_discussed is True
-    # Rafique Sir now appears, with the exact first-time framing
     reply5 = (r5.reply_text or "").lower()
     assert "rafique sir" in reply5
-    assert "10+ years" in reply5 or "10 years" in reply5 or "10+" in reply5
-    assert "i'm just stellar ai" in reply5
+    assert "10+ years" in reply5
 
-    # 6. cycle is complete — the bot keeps managing the chat, doesn't go quiet,
-    #    and doesn't force the intro framing again every turn.
+    # 6. cycle is complete — the bot keeps managing the chat, doesn't go quiet
     r6 = await turn("ok thanks", "wamid.C6")
     assert r6.action == "sent"
 
@@ -212,10 +212,10 @@ async def test_off_script_question_answered_without_dropping_the_pending_step(
 
     r3 = await turn("PCB was 60%", "wamid.D3")
     assert lead.eligibility_flag == EligibilityFlag.ABOVE_CUTOFF
-    # country decision step now active, not re-asking anything already answered
+    # country decision / roadmap step now active, not re-asking anything already answered
     reply3 = (r3.reply_text or "").lower()
     assert "neet score" not in reply3
-    assert "country" in reply3
+    assert "countries" in reply3 or "roadmap" in reply3
 
 
 async def test_naming_a_country_immediately_skips_still_deciding(
@@ -237,18 +237,15 @@ async def test_naming_a_country_immediately_skips_still_deciding(
     await turn("250 in NEET", "wamid.E2")
     r3 = await turn("PCB 70%", "wamid.E3")
     assert lead.eligibility_flag == EligibilityFlag.ABOVE_CUTOFF
-    assert "rafique" not in (r3.reply_text or "").lower()
+    assert "roadmap" in (r3.reply_text or "").lower() or "uzbekistan" in (r3.reply_text or "").lower()
 
     # skip "still deciding" entirely — name a country the moment eligible
     r4 = await turn("I want Georgia", "wamid.E4")
     assert lead.target_country == "Georgia"
+    assert lead.country_discussed is True
     reply4 = (r4.reply_text or "").lower()
-    assert "any specific college you have in mind" in reply4
-    assert "rafique" not in reply4  # bot hasn't named a country in a PRIOR reply yet
+    assert "rafique sir" in reply4
     assert lead.country_still_deciding is False
 
-    # the lead's own reply now completes the back-and-forth (bot named
-    # Georgia this turn, lead named it too) — Rafique unlocks next turn.
     r5 = await turn("sounds good", "wamid.E5")
-    assert lead.country_discussed is True
-    assert "rafique sir" in (r5.reply_text or "").lower()
+    assert r5.action == "sent"

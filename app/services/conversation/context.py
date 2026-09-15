@@ -432,27 +432,29 @@ def _country_gate_block(effective_country_discussed: bool) -> str:
 
 
 _STILL_DECIDING_CONTENT = (
-    "Present the complete roadmap of major countries with their total budgets, process, and support in this exact smooth format:\n\n"
-    "Acknowledge their NEET score warmly (e.g. \"Great! A [score] in NEET is a solid score that qualifies you comfortably for top government medical universities abroad.\").\n\n"
+    "Present the complete roadmap of major countries with their total budgets, process, support, and director introduction in this exact smooth format:\n\n"
+    "Acknowledge their scores warmly (e.g. \"Great! With [score] in NEET and [PCB%] in 12th PCB, you comfortably qualify for top government medical universities abroad.\").\n\n"
     "Here is the complete roadmap of major countries and their total budgets:\n"
-    "• Uzbekistan: ₹30–35 Lakh\n"
-    "• Kazakhstan: ₹30–35 Lakh\n"
-    "• Kyrgyzstan: ₹30–35 Lakh\n"
-    "• Russia: ₹27–45 Lakh\n"
-    "• Bangladesh: ₹32–45 Lakh\n"
-    "• Georgia: ₹38–55 Lakh\n"
-    "• Nepal: ₹57–80 Lakh\n\n"
+    "• Uzbekistan: approx. ₹30–35 Lakh\n"
+    "• Kazakhstan: approx. ₹30–35 Lakh\n"
+    "• Kyrgyzstan: approx. ₹30–35 Lakh\n"
+    "• Russia: approx. ₹27–45 Lakh\n"
+    "• Bangladesh: approx. ₹32–45 Lakh\n"
+    "• Georgia: approx. ₹38–55 Lakh\n"
+    "• Nepal: approx. ₹57–80 Lakh\n\n"
     "We work primarily with NMC-recognised government universities across all these destinations, as well as select private universities.\n\n"
     "We handle your complete journey end-to-end:\n"
     "• Full 20-Day Process: Document preparation, university offer letter, visa stamping, and travel arrangements.\n"
     "• Full 5+1 Year On-Ground Support: Separate boys & girls hostels, 24/7 security, Indian mess food, and college support throughout your degree and internship.\n\n"
-    "Close with: \"Do you have a preferred budget range, or any region you’d like to explore first? (Also, what was your 12th PCB percentage?)\"\n\n"
-    "Do NOT deflect to Rafique Sir or push a phone call here — answer smoothly and let the student explore the options first.\n"
+    "Do you have a preferred budget range, or any region you’d like to explore first?\n\n"
+    "At the end of the message, introduce Rafique Sir:\n"
+    "\"For advanced guidance, we recommend reaching out directly to Rafique Sir. He is our Director and has been personally guiding students and handling this entire process for the past 10+ years. You can reach him directly at +91 87674 24644 (and if you'd like our Thane office address, just let me know and I will share it!).\"\n"
 )
 
 _RAFIQUE_INTRO_CONTENT = (
     "When the student has narrowed down a country, asks to speak to someone, or asks to visit our office: "
     "connect them with director Rafique Sir (+91 87674 24644) or our Thane office. "
+    "He has been personally guiding students and handling this entire process for over 10+ years. "
     "Never deflect early while they are still exploring destinations.\n"
 )
 
@@ -537,29 +539,23 @@ def _cycle_block(lead: Lead, effective_country_discussed: bool) -> str:
 
     # From here eligibility_flag is ABOVE_CUTOFF.
 
-    # Step 3 — country decision: ask once, then never again.
-    if not lead.target_country and not lead.country_still_deciding:
-        return (
-            "\n## CYCLE STEP — country decision\n"
-            "Eligibility is confirmed. Next, find out whether they've already "
-            "decided on a country or are still deciding between a few. After "
-            "answering whatever they actually asked, weave in ONE natural ask "
-            "about this, once per reply, until they answer.\n"
-        )
-
-    # Step 3b — deliver the content once (until a real back-and-forth has
+    # Deliver country roadmap / spotlight (until a real back-and-forth has
     # happened — effective_country_discussed is that same tracked signal).
     if not effective_country_discussed:
         if lead.target_country:
             return (
                 f"\n## CYCLE STEP — country: {lead.target_country} (decided)\n"
-                f"They've settled on {lead.target_country}. Name it, then give "
-                "the confirmed government college list for it from the "
-                "knowledge snippets below (never invent a name beyond what's "
-                "listed), then close with: \"We're also open to any specific "
-                "college you have in mind — happy to look into that too.\"\n"
+                f"Present the spotlight for {lead.target_country} in this exact format:\n\n"
+                f"1. State the approx. total budget for {lead.target_country} clearly (e.g. \"For *{lead.target_country}*, the total budget is approx. ₹XX–YY Lakh (covering tuition, hostel, and food).\").\n"
+                f"2. List top NMC-recognised government medical universities for {lead.target_country} from the knowledge snippets below (and note that select private universities are also available if preferred).\n"
+                "3. Reassure them with our end-to-end process and support:\n"
+                "   • Full 20-Day Process: Document preparation, university offer letter, visa stamping, and travel arrangements.\n"
+                "   • Full 5+1 Year On-Ground Support: Separate boys & girls hostels, 24/7 security, Indian mess food, and college support throughout your degree and internship.\n"
+                "4. Close with: \"We're also open to any specific college you have in mind — happy to look into that too. Would you like more details on any of these universities?\"\n"
+                "5. At the end of the message, recommend Director Rafique Sir:\n"
+                "   \"For advanced guidance, we recommend reaching out directly to Rafique Sir. He is our Director and has been personally guiding students and handling this entire process for the past 10+ years. You can reach him directly at +91 87674 24644 (and if you'd like our Thane office address, just let me know and I will share it!).\"\n"
             )
-        return "\n## CYCLE STEP — country: still deciding\n" + _STILL_DECIDING_CONTENT
+        return "\n## CYCLE STEP — country: roadmap & options\n" + _STILL_DECIDING_CONTENT
 
     # Step 4 — Rafique Sir introduction (only reachable once
     # effective_country_discussed is true, i.e. the guard will actually allow

@@ -173,7 +173,9 @@ _COUNTRY_UNDECIDED = re.compile(
     r"\b(still deciding|haven'?t decided|not decided (?:yet|on a country)?|"
     r"not sure which country|which country (?:is best|should i|would you "
     r"recommend)|confused (?:between|about) countries|compare countries|"
-    r"not sure about (?:the )?country|no idea which country)\b",
+    r"not sure about (?:the )?country|no idea which country|"
+    r"don'?t have (?:a|any)? ?country in mind|no country in mind|"
+    r"country list|all (?:the )?countries|any country is fine)\b",
     re.IGNORECASE,
 )
 

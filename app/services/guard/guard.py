@@ -181,9 +181,8 @@ class ResponseGuard:
         # When presenting the roadmap of destinations and budgets (Uzbekistan, Kazakhstan, Kyrgyzstan, Russia, etc.),
         # multiple countries are legitimately listed together with their packages.
         is_roadmap = (
-            len(named) >= 3
-            or "roadmap" in text.lower()
-            or ("uzbekistan" in text.lower() and "kazakhstan" in text.lower())
+            "roadmap" in text.lower()
+            or len(named) >= 5
         )
         if is_roadmap:
             all_lo = min(b[0] for b in ctx.country_bounds.values())
@@ -442,7 +441,9 @@ class ResponseGuard:
         before that state is set is blocked and regenerated exactly like an
         out-of-range cost figure, never left to prompt wording alone."""
 
-        if ctx.country_discussed:
+        if ctx.country_discussed or (
+            ctx.country_bounds and detectors.countries_named(text, list(ctx.country_bounds))
+        ):
             return []
         hits = detectors.find_counselor_offer(
             text,

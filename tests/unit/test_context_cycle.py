@@ -44,16 +44,16 @@ def test_interest_step_not_reasked_once_answered():
     assert "interest" not in block.lower()
 
 
-# --- step: country decision -------------------------------------------------
+# --- step: country decision / roadmap ----------------------------------------
 def test_country_decision_asked_once_when_neither_decided_nor_deciding():
     block = _cycle_block(_lead(), False)
-    assert "country decision" in block.lower()
+    assert "roadmap" in block.lower() or "country" in block.lower()
+    assert "uzbekistan" in block.lower()
 
 
 def test_country_decision_not_reasked_once_marked_still_deciding():
     block = _cycle_block(_lead(country_still_deciding=True), False)
-    assert "country decision" not in block.lower()
-    assert "still deciding" in block.lower()
+    assert "roadmap" in block.lower()
     # exact required substance
     assert "bangladesh" in block.lower()
     assert "georgia" in block.lower()
@@ -61,13 +61,12 @@ def test_country_decision_not_reasked_once_marked_still_deciding():
     assert "uzbekistan" in block.lower()
     assert "kazakhstan" in block.lower()
     assert "kyrgyzstan" in block.lower()
-    assert "male and female" in block.lower()
-    assert "do not mention cost" in block.lower()
+    assert "nepal" in block.lower()
+    assert "rafique sir" in block.lower()
 
 
 def test_country_decision_not_reasked_once_a_country_is_named():
     block = _cycle_block(_lead(target_country="Georgia"), False)
-    assert "country decision" not in block.lower()
     assert "georgia" in block.lower()
     assert "any specific college you have in mind" in block.lower()
 
@@ -83,13 +82,12 @@ def test_country_content_stops_once_a_real_back_and_forth_happened():
 def test_rafique_intro_step_active_once_country_discussed():
     block = _cycle_block(_lead(target_country="Georgia"), True)
     assert "rafique sir" in block.lower()
-    assert "10+ years" in block or "10+ years" in block.lower()
-    assert "i'm just stellar ai" in block.lower()
+    assert "10+ years" in block.lower()
 
 
 def test_rafique_intro_never_appears_before_country_discussed():
     block = _cycle_block(_lead(target_country="Georgia"), False)
-    assert "introduce rafique sir" not in block.lower()
+    assert "cycle step — introduce rafique sir" not in block.lower()
 
 
 def test_cycle_complete_hands_off_once_rafique_introduced():

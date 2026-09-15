@@ -236,3 +236,16 @@ async def test_extract_qualifiers_times_out_instead_of_hanging():
     assert elapsed < 5.0, "extract_qualifiers waited far longer than the configured timeout"
     assert llm.calls == 1
     assert result.neet_score == 240  # the heuristic pass still ran
+
+
+def test_extract_undecided_phrases():
+    for phrase in (
+        "I don't have any country in mind",
+        "no country in mind",
+        "can you give me all the country list",
+        "still deciding between a few",
+        "haven't decided yet",
+        "any country is fine",
+    ):
+        res = heuristic_extract(phrase, speaker=RoleHint.STUDENT)
+        assert res.country_still_deciding is True, f"Failed for: {phrase}"
