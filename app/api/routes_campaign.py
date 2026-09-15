@@ -261,6 +261,8 @@ async def campaign_dashboard():
     .btn-start:hover { transform: translateY(-1px); filter: brightness(1.1); }
     .btn-pause { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
     .btn-pause:hover { background: rgba(245, 158, 11, 0.25); }
+    .btn-reset { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .btn-reset:hover { background: rgba(239, 68, 68, 0.25); }
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
     .stat-card {
       background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px;
@@ -306,6 +308,7 @@ async def campaign_dashboard():
       <div class="controls">
         <button class="btn-start" id="startBtn" onclick="triggerStart()">🚀 Start 98-Lead Campaign</button>
         <button class="btn-pause" id="pauseBtn" onclick="triggerTogglePause()" style="display: none;">⏸️ Pause</button>
+        <button class="btn-reset" id="resetBtn" onclick="triggerReset()">🔄 Reset to Zero</button>
       </div>
     </div>
 
@@ -434,6 +437,12 @@ async def campaign_dashboard():
       updateStatus();
     }
 
+    async function triggerReset() {
+      if (!confirm('Are you sure you want to stop and reset the campaign back to 0 leads?')) return;
+      await fetch('/api/campaign/reset', { method: 'POST' });
+      updateStatus();
+    }
+
     // Auto poll every 1.5 seconds for live countdown
     setInterval(updateStatus, 1500);
     updateStatus();
@@ -462,17 +471,44 @@ async def get_campaign_status():
     })
 
 
+@router.post("/api/campaign/reset")
+async def reset_campaign():
+    global state
+    if state.task and not state.task.done():
+        state.task.cancel()
+        state.task = None
+
+    state.status = "idle"
+    state.current_set = 1
+    state.current_lead_index = 0
+    state.sent_count = 0
+    state.failed_count = 0
+    state.status_text = "Campaign reset to zero. Ready to start from Set 1."
+    state.countdown_seconds = 0
+    state.last_sent_phone = ""
+    state.last_sent_time = ""
+    state.history = []
+    state.total_leads = len(SET_1_NUMBERS) + len(SET_2_NUMBERS)
+    state.pause_event.set()
+    return {"ok": True, "message": "Campaign has been reset to zero."}
+
+
 @router.post("/api/campaign/start")
 async def start_campaign():
     global state
-    if state.status in ("running", "cooldown"):
-        return {"ok": True, "message": "Campaign is already running."}
+    # Stop any previous task cleanly
+    if state.task and not state.task.done():
+        state.task.cancel()
+        state.task = None
 
     state.sent_count = 0
     state.failed_count = 0
     state.history = []
     state.total_leads = len(SET_1_NUMBERS) + len(SET_2_NUMBERS)
+    state.current_set = 1
+    state.current_lead_index = 0
     state.status = "running"
+    state.status_text = "Starting campaign from Set 1..."
     state.pause_event.set()
     state.task = asyncio.create_task(_run_campaign_task())
     return {"ok": True, "message": "Campaign task launched in background."}

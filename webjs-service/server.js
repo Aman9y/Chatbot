@@ -572,20 +572,35 @@ app.post('/send', requireApiSecret, async (req, res) => {
 
   // ── enqueue the send (sequential, no concurrent sends) ───────────────────
   // Prefer sending to known LID target if this lead originated from LID chat
-  const targetLid = phoneToLid.get(normalizedPhone);
-  const waId = targetLid || `${normalizedPhone}@c.us`;
+  let waId = phoneToLid.get(normalizedPhone);
   const msgText = message.trim();
 
   let sendResult = null;
   let sendError  = null;
 
   await enqueueSend(async () => {
+    // Resolve canonical WhatsApp JID via getNumberId to verify registration
+    if (!waId) {
+      try {
+        const numberDetails = await waClient.getNumberId(normalizedPhone);
+        if (numberDetails && numberDetails._serialized) {
+          waId = numberDetails._serialized;
+          console.log(`[webjs] Resolved getNumberId for ${normalizedPhone} -> ${waId}`);
+        }
+      } catch (lookupErr) {
+        console.warn(`[webjs] getNumberId failed for ${normalizedPhone}:`, lookupErr.message);
+      }
+    }
+    if (!waId) {
+      waId = `${normalizedPhone}@c.us`;
+    }
+
     try {
       sendResult = await waClient.sendMessage(waId, msgText);
       if (SEND_DELAY_MS > 0) await delay(SEND_DELAY_MS);
     } catch (err) {
-      // Fallback: if sending via targetLid failed, try @c.us (or vice versa)
-      const altWaId = (waId === targetLid) ? `${normalizedPhone}@c.us` : targetLid;
+      // Fallback: if sending via resolved JID failed, try raw @c.us
+      const altWaId = (waId === `${normalizedPhone}@c.us`) ? null : `${normalizedPhone}@c.us`;
       if (altWaId) {
         try {
           console.log(`[webjs] Initial send to ${waId} failed (${err.message}). Retrying via ${altWaId}...`);
